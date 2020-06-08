@@ -25,9 +25,9 @@ It will listen on `0.0.0.0:8314`
 
 ## Geography database
 
-We're using GeoLite2 City from MaxMind, Inc for the Geography Database.
+This project includes GeoLite2 data created by MaxMind, available from [here](https://www.maxmind.com).
 
-This program doesn't store IP in the database. Only the city level geographic data is stored.
+This program doesn't store IP. Only the city level geographic data is recorded.
 
 ## License
 Copyright (c) 2020 Longhorn Authors
