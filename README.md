@@ -1,4 +1,4 @@
-Longhorn Upgrade Responder
+Longhorn Upgrade Responder[![Build Status](https://drone-publish.longhorn.io/api/badges/longhorn/upgrade-responder/status.svg)](https://drone-publish.longhorn.io/longhorn/upgrade-responder)
 ========
 
 ## Building
@@ -30,7 +30,7 @@ This project includes GeoLite2 data created by MaxMind, available from [here](ht
 This program doesn't store IP. Only the city level geographic data is recorded.
 
 ## License
-Copyright (c) 2020 Longhorn Authors
+Copyright (c) 2021 Longhorn Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
