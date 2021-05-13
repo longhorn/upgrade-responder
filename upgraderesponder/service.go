@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Masterminds/semver"
@@ -15,28 +14,37 @@ import (
 	influxcli "github.com/influxdata/influxdb/client/v2"
 	maxminddb "github.com/oschwald/maxminddb-golang"
 	"github.com/pkg/errors"
+
+	"github.com/longhorn/upgrade-responder/utils"
 )
 
 const (
-	VersionTagLatest       = "latest"
-	LonghornMinimalVersion = "v0.0.1"
+	VersionTagLatest  = "latest"
+	AppMinimalVersion = "v0.0.1"
 
-	// ns is good for counting nodes
-	InfluxDBPrecisionNanosecond = "ns"
-	InfluxDBDatabase            = "longhorn_upgrade_responder"
+	InfluxDBMeasurement              = "upgrade_request"
+	InfluxDBMeasurementDownSampling  = "upgrade_request_down_sampling"
+	InfluxDBMeasurementByAppVersion  = "by_app_version_down_sampling"
+	InfluxDBMeasurementByCountryCode = "by_country_code_down_sampling"
 
-	InfluxDBMeasurementName = "longhorn_upgrade_query"
+	InfluxDBContinuousQueryDownSampling  = "cq_upgrade_request_down_sampling"
+	InfluxDBContinuousQueryByAppVersion  = "cq_by_app_version_down_sampling"
+	InfluxDBContinuousQueryByCountryCode = "cq_by_country_code_down_sampling"
 )
 
 var (
-	InfluxDBTagLonghornVersion        = "longhorn_version"
+	InfluxDBPrecisionNanosecond   = "ns" // ns is good for counting nodes
+	InfluxDBDatabase              = "upgrade_responder"
+	InfluxDBContinuousQueryPeriod = "1h"
+
+	InfluxDBTagAppVersion             = "app_version"
 	InfluxDBTagKubernetesVersion      = "kubernetes_version"
 	InfluxDBTagLocationCity           = "city"
 	InfluxDBTagLocationCountry        = "country"
 	InfluxDBTagLocationCountryISOCode = "country_isocode"
 
 	HTTPHeaderXForwardedFor = "X-Forwarded-For"
-	HTTPHeaderRequestID     = "X-Request-ID"
+	HTTPHeaderRequestID     = "X-Request-Id"
 )
 
 type Server struct {
@@ -66,19 +74,24 @@ type Version struct {
 }
 
 type CheckUpgradeRequest struct {
-	LonghornVersion   string `json:"longhornVersion"`
-	KubernetesVersion string `json:"kubernetesVersion"`
+	AppVersion string            `json:"appVersion"`
+	ExtraInfo  map[string]string `json:"extraInfo"`
 }
 
 type CheckUpgradeResponse struct {
 	Versions []Version `json:"versions"`
 }
 
-func NewServer(done chan struct{}, configFile, influxURL, influxUser, influxPass, geodb string) (*Server, error) {
+func NewServer(done chan struct{}, applicationName, configFile, influxURL, influxUser, influxPass, queryPeriod, geodb string) (*Server, error) {
+	InfluxDBDatabase = applicationName + "_" + InfluxDBDatabase
+	if queryPeriod != "" {
+		InfluxDBContinuousQueryPeriod = queryPeriod
+	}
+
 	path := filepath.Clean(configFile)
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "fail to open configFile")
 	}
 	defer f.Close()
 
@@ -97,7 +110,7 @@ func NewServer(done chan struct{}, configFile, influxURL, influxUser, influxPass
 
 	db, err := maxminddb.Open(geodb)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "fail to open geodb file")
 	}
 	s.db = db
 	logrus.Debugf("GeoDB opened")
@@ -146,6 +159,9 @@ func (s *Server) initDB() error {
 	if err := s.createDB(InfluxDBDatabase); err != nil {
 		return err
 	}
+	if err := s.createContinuousQueries(InfluxDBDatabase); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -157,6 +173,34 @@ func (s *Server) createDB(name string) error {
 	}
 	if response.Error() != nil {
 		return response.Error()
+	}
+	logrus.Debugf("Database %v is either created or already exists", name)
+	return nil
+}
+
+func (s *Server) createContinuousQueries(dbName string) error {
+	queryStrings := map[string]string{}
+
+	queryStrings[InfluxDBContinuousQueryDownSampling] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT count(%v) as total INTO %v FROM %v GROUP BY time(%v) END",
+		InfluxDBContinuousQueryDownSampling, dbName, utils.ToSnakeCase(HTTPHeaderRequestID), InfluxDBMeasurementDownSampling, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod)
+	queryStrings[InfluxDBContinuousQueryByAppVersion] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT count(%v) as total INTO %v FROM %v GROUP BY time(%v),%v END",
+		InfluxDBContinuousQueryByAppVersion, dbName, utils.ToSnakeCase(HTTPHeaderRequestID), InfluxDBMeasurementByAppVersion, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod, InfluxDBTagAppVersion)
+	queryStrings[InfluxDBContinuousQueryByCountryCode] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT count(%v) as total INTO %v FROM %v GROUP BY time(%v),%v END",
+		InfluxDBContinuousQueryByCountryCode, dbName, utils.ToSnakeCase(HTTPHeaderRequestID), InfluxDBMeasurementByCountryCode, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod, InfluxDBTagLocationCountryISOCode)
+
+	for queryName, queryString := range queryStrings {
+		query := influxcli.NewQuery(queryString, "", "")
+		response, err := s.influxClient.Query(query)
+		if err != nil {
+			return err
+		}
+		if err := response.Error(); err != nil {
+			if utils.IsAlreadyExistsError(err) {
+				logrus.Debugf("The continuous query %v is already exists and cannot be modified. If you modified --query-period, please manually drop the continuous query %v from the database %v and retry", queryName, queryName, dbName)
+			}
+			return err
+		}
+		logrus.Debugf("Created continuous query %v", queryName)
 	}
 	return nil
 }
@@ -209,6 +253,7 @@ func (s *Server) CheckUpgrade(rw http.ResponseWriter, req *http.Request) {
 	if err = json.NewDecoder(req.Body).Decode(&checkReq); err != nil {
 		return
 	}
+	logrus.Debugf("Request %v", &checkReq)
 
 	s.recordRequest(req, &checkReq)
 
@@ -250,10 +295,10 @@ func (s *Server) getParsedVersionWithTag(tag string) (*semver.Version, *Version,
 
 func (s *Server) GenerateCheckUpgradeResponse(request *CheckUpgradeRequest) (*CheckUpgradeResponse, error) {
 	/* disable version dependency reseponse
-	reqVer, err := semver.NewVersion(request.LonghornVersion)
+	reqVer, err := semver.NewVersion(request.AppVersion)
 	if err != nil {
-		logrus.Warnf("Invalid version in request: %v: %v, response with the latest version", request.LonghornVersion, err)
-		reqVer, err = semver.NewVersion(LonghornMinimalVersion)
+		logrus.Warnf("Invalid version in request: %v: %v, response with the latest version", request.AppVersion, err)
+		reqVer, err = semver.NewVersion(AppMinimalVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -309,25 +354,30 @@ func (s *Server) getLocation(addr string) (*Location, error) {
 	return &loc, nil
 }
 
-func canonializeField(name string) string {
-	return strings.Replace(strings.ToLower(HTTPHeaderRequestID), "-", "_", -1)
-}
+//func canonializeField(name string) string {
+//	return strings.Replace(strings.ToLower(HTTPHeaderRequestID), "-", "_", -1)
+//}
 
 // Don't need to return error to the requester
 func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) {
 	xForwaredFor := httpReq.Header[HTTPHeaderXForwardedFor]
-	requestID := httpReq.Header[HTTPHeaderRequestID]
 	publicIP := ""
 	l := len(xForwaredFor)
-	if l != 0 {
+	if l > 0 {
 		// rightmost IP must be the public IP
 		publicIP = xForwaredFor[l-1]
+	}
+
+	xRequestId := httpReq.Header[HTTPHeaderRequestID]
+	requestID := ""
+	if len(xRequestId) > 0 {
+		requestID = xRequestId[0]
 	}
 
 	// We use IP to find the location but we don't store IP
 	loc, err := s.getLocation(publicIP)
 	if err != nil {
-		logrus.Errorf("Failed to get location for one ip")
+		logrus.Error("Failed to get location for one ip")
 	}
 	logrus.Debugf("HTTP request: RequestID \"%v\", Location %+v, req %v",
 		requestID, loc, req)
@@ -344,18 +394,20 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 		}()
 
 		tags := map[string]string{
-			InfluxDBTagLonghornVersion:   req.LonghornVersion,
-			InfluxDBTagKubernetesVersion: req.KubernetesVersion,
+			InfluxDBTagAppVersion: req.AppVersion,
+		}
+		for k, v := range req.ExtraInfo {
+			tags[utils.ToSnakeCase(k)] = v
 		}
 		fields := map[string]interface{}{
-			canonializeField(HTTPHeaderRequestID): requestID,
+			utils.ToSnakeCase(HTTPHeaderRequestID): requestID,
 		}
 		if loc != nil {
 			tags[InfluxDBTagLocationCity] = loc.City
 			tags[InfluxDBTagLocationCountry] = loc.Country.Name
 			tags[InfluxDBTagLocationCountryISOCode] = loc.Country.ISOCode
 		}
-		pt, err = influxcli.NewPoint(InfluxDBMeasurementName, tags, fields, time.Now())
+		pt, err = influxcli.NewPoint(InfluxDBMeasurement, tags, fields, time.Now())
 		if err != nil {
 			return
 		}
