@@ -18,14 +18,20 @@ var VERSION = "v0.0.0-dev"
 const (
 	FlagUpgradeResponseConfiguration = "upgrade-response-config"
 	EnvUpgradeResponseConfiguration  = "UPGRADE_RESPONSE_CONFIG"
+	FlagApplicationName              = "application-name"
+	EnvApplicationName               = "APPLICATION_NAME"
 	FlagInfluxDBURL                  = "influxdb-url"
 	EnvInfluxDBURL                   = "INFLUXDB_URL"
 	FlagInfluxDBUser                 = "influxdb-user"
 	EnvInfluxDBUser                  = "INFLUXDB_USER"
 	FlagInfluxDBPass                 = "influxdb-pass"
 	EnvInfluxDBPass                  = "INFLUXDB_PASS"
+	FlagQueryPeriod                  = "query-period"
+	EnvQueryPeriod                   = "QUERY_PERIOD"
 	FlagGeoDB                        = "geodb"
 	EnvGeoDB                         = "GEODB"
+	FlagPort                         = "port"
+	EnvPort                          = "PORT"
 )
 
 func main() {
@@ -62,12 +68,17 @@ func UpgradeResponderCmd() cli.Command {
 			cli.StringFlag{
 				Name:   FlagUpgradeResponseConfiguration,
 				EnvVar: EnvUpgradeResponseConfiguration,
-				Usage:  "Specify the response configuration for upgrade query",
+				Usage:  "Specify the response configuration file for upgrade query",
+			},
+			cli.StringFlag{
+				Name:   FlagApplicationName,
+				EnvVar: EnvApplicationName,
+				Usage:  "Specify the name of the application that is using this upgrade checker. This will be used to create a database name <application-name>_upgrade_responder in the InfluxDB to store all data for this upgrade checker",
 			},
 			cli.StringFlag{
 				Name:   FlagInfluxDBURL,
 				EnvVar: EnvInfluxDBURL,
-				Usage:  "Specify the location of InfluxDB",
+				Usage:  "Specify the URL of InfluxDB",
 			},
 			cli.StringFlag{
 				Name:   FlagInfluxDBUser,
@@ -80,9 +91,20 @@ func UpgradeResponderCmd() cli.Command {
 				Usage:  "Specify the InfluxDB password",
 			},
 			cli.StringFlag{
+				Name:   FlagQueryPeriod,
+				EnvVar: EnvQueryPeriod,
+				Usage:  "Specify the period for how often each instance of the application makes the request. Cannot change after set for the first time. The default value is 1h. This value should be the same as time in GROUP BY clause in Grafana",
+			},
+			cli.StringFlag{
 				Name:   FlagGeoDB,
 				EnvVar: EnvGeoDB,
-				Usage:  "Specify the location of GeoDB",
+				Usage:  "Specify the path of to GeoDB file",
+			},
+			cli.StringFlag{
+				Name:   FlagPort,
+				EnvVar: EnvPort,
+				Value:  "8314",
+				Usage:  "Specify the port number",
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -92,24 +114,36 @@ func UpgradeResponderCmd() cli.Command {
 }
 
 func startUpgradeResponder(c *cli.Context) error {
-	cfg := c.String(FlagUpgradeResponseConfiguration)
-	if cfg == "" {
-		return fmt.Errorf("no upgrade response configuration specified")
+	if err := validateCommandLineArguments(c); err != nil {
+		return err
 	}
 
+	cfg := c.String(FlagUpgradeResponseConfiguration)
 	influxURL := c.String(FlagInfluxDBURL)
 	influxUser := c.String(FlagInfluxDBUser)
 	influxPass := c.String(FlagInfluxDBPass)
+	queryPeriod := c.String(FlagQueryPeriod)
+	applicationName := c.String(FlagApplicationName)
 	geodb := c.String(FlagGeoDB)
+	port := c.String(FlagPort)
+
 	done := make(chan struct{})
-	server, err := upgraderesponder.NewServer(done, cfg, influxURL, influxUser, influxPass, geodb)
+	server, err := upgraderesponder.NewServer(done, applicationName, cfg, influxURL, influxUser, influxPass, queryPeriod, geodb)
 	if err != nil {
 		return err
 	}
 	router := http.Handler(upgraderesponder.NewRouter(server))
 
-	listen := "0.0.0.0:8314"
-	go http.ListenAndServe(listen, router)
+	listeningAddress := "0.0.0.0" + ":" + port
+
+	go func() {
+		logrus.Infof("Server is listening at %v", listeningAddress)
+		// always returns error. ErrServerClosed on graceful close
+		if err := http.ListenAndServe(listeningAddress, router); err != http.ErrServerClosed {
+			logrus.Fatalf("%v", err)
+		}
+		<-done
+	}()
 
 	RegisterShutdownChannel(done)
 	<-done
@@ -124,4 +158,18 @@ func RegisterShutdownChannel(done chan struct{}) {
 		logrus.Infof("Receive %v to exit", sig)
 		close(done)
 	}()
+}
+
+func validateCommandLineArguments(c *cli.Context) error {
+	cfg := c.String(FlagUpgradeResponseConfiguration)
+	if cfg == "" {
+		return fmt.Errorf("no upgrade response configuration file specified")
+	}
+
+	applicationName := c.String(FlagApplicationName)
+	if applicationName == "" {
+		return fmt.Errorf("no application name specified")
+	}
+
+	return nil
 }
