@@ -162,7 +162,7 @@ Changing the value may cause temporary data mismatch in InfluxDB. If you need to
    # all continuous queries in the database <application-name>_upgrade_responder are displayed
    > DROP CONTINUOUS QUERY <continuous-query-name> ON <application-name>_upgrade_responder
    ```
-1. Restart Upgrade Responder server with new value for `--influxdb-continuous-query-period`
+1. Restart Upgrade Responder server with new value for `--query-period`
 1. Change the time in GROUP BY clause in Grafana dashboard queries to match `--query-period`
 1. Modify your application to send requests to Upgrade Responder server every `--query-period` interval
 

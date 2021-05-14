@@ -100,10 +100,10 @@ func UpgradeResponderCmd() cli.Command {
 				EnvVar: EnvGeoDB,
 				Usage:  "Specify the path of to GeoDB file",
 			},
-			cli.StringFlag{
+			cli.IntFlag{
 				Name:   FlagPort,
 				EnvVar: EnvPort,
-				Value:  "8314",
+				Value:  8314,
 				Usage:  "Specify the port number",
 			},
 		},
@@ -125,7 +125,7 @@ func startUpgradeResponder(c *cli.Context) error {
 	queryPeriod := c.String(FlagQueryPeriod)
 	applicationName := c.String(FlagApplicationName)
 	geodb := c.String(FlagGeoDB)
-	port := c.String(FlagPort)
+	port := c.Int(FlagPort)
 
 	done := make(chan struct{})
 	server, err := upgraderesponder.NewServer(done, applicationName, cfg, influxURL, influxUser, influxPass, queryPeriod, geodb)
@@ -134,7 +134,7 @@ func startUpgradeResponder(c *cli.Context) error {
 	}
 	router := http.Handler(upgraderesponder.NewRouter(server))
 
-	listeningAddress := "0.0.0.0" + ":" + port
+	listeningAddress := fmt.Sprintf("0.0.0.0:%v", port)
 
 	go func() {
 		logrus.Infof("Server is listening at %v", listeningAddress)
