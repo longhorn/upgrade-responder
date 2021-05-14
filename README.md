@@ -46,6 +46,8 @@ The available flags are:
 | `--geodb` | `/etc/upgrade-responder/GeoLite2-City.mmdb` | Specify the path of to GeoDB file.  See [Geography database](#geography-database) for more details about GeoDB |
 | `--port` | `8314` | Specify the port number. By default port `8314` is used |
 
+If you are deploying Upgrade Responder Server in Kubernetes, you can use our provided [chart](./chart).
+
 As a quick way to check Upgrade Responder server is up and running, make a request to it:
 ```shell
 curl -X POST http://<SERVER-IP>:8314/v1/checkupgrade \
