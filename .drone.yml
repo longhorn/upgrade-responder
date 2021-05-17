@@ -48,7 +48,7 @@ steps:
       from_secret: docker_username
   when:
     instance:
-    - drone-publish.rancher.io
+    - drone-publish.longhorn.io
     ref:
     - refs/tags/*
     event:
