@@ -206,7 +206,7 @@ func (s *Server) createContinuousQueries(dbName string) error {
 }
 
 func (s *Server) validateAndLoadResponseConfig(config *ResponseConfig) error {
-	for _, v := range config.Versions {
+	for i, v := range config.Versions {
 		if len(v.Tags) == 0 {
 			return fmt.Errorf("invalid empty label for %v", v)
 		}
@@ -223,9 +223,9 @@ func (s *Server) validateAndLoadResponseConfig(config *ResponseConfig) error {
 			if s.TagVersionMap[l] != nil {
 				return fmt.Errorf("invalid duplicate label %v", l)
 			}
-			s.TagVersionMap[l] = &v
+			s.TagVersionMap[l] = &config.Versions[i]
 		}
-		s.VersionMap[v.Name] = &v
+		s.VersionMap[v.Name] = &config.Versions[i]
 	}
 	if s.TagVersionMap[VersionTagLatest] == nil {
 		return fmt.Errorf("no latest label specified")
@@ -308,17 +308,22 @@ func (s *Server) GenerateCheckUpgradeResponse(request *CheckUpgradeRequest) (*Ch
 
 	// Only supports `latest` label for now
 	//latestVer, version, err := s.getParsedVersionWithTag(VersionTagLatest)
-	_, version, err := s.getParsedVersionWithTag(VersionTagLatest)
-	if err != nil {
-		logrus.Errorf("BUG: unable to get an valid tag for %v: %v", VersionTagLatest, err)
-		return nil, err
-	}
+	//_, version, err := s.getParsedVersionWithTag(VersionTagLatest)
+	//if err != nil {
+	//	logrus.Errorf("BUG: unable to get an valid tag for %v: %v", VersionTagLatest, err)
+	//	return nil, err
+	//}
 	/* disable version dependency reseponse
 	if reqVer.LessThan(latestVer) {
 		resp.Versions = append(resp.Versions, *version)
 	}
 	*/
-	resp.Versions = append(resp.Versions, *version)
+	//resp.Versions = append(resp.Versions, *version)
+
+	for _, v := range s.VersionMap {
+		resp.Versions = append(resp.Versions, *v)
+	}
+
 	return resp, nil
 }
 
