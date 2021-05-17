@@ -100,6 +100,11 @@ By default, Upgrade Responder only groups data by `appVersion` field and creates
 If you add extra fields and want to display statical information for those fields, there are extra steps you need to follow to setup InfluxDB and Grafana. 
 See [Add kubernetesVersion extra field](#add-kubernetesVersion-extra-field) for an example of how to add an extra field. 
 
+#### Go client
+If your application is written in Golang, you can import our provided [client package](./client) and use it to save time writing code. 
+See our [example](./example) for how to use the client package.
+
+
 ## References
 
 ### Response JSON config example
