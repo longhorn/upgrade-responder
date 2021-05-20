@@ -44,7 +44,8 @@ var (
 	InfluxDBTagLocationCountryISOCode = "country_isocode"
 
 	HTTPHeaderXForwardedFor = "X-Forwarded-For"
-	HTTPHeaderRequestID     = "X-Request-Id"
+	ValueFieldKey           = "value" // A dummy InfluxDB field used to count the number of points
+	ValueFieldValue         = 1
 )
 
 type Server struct {
@@ -182,11 +183,11 @@ func (s *Server) createContinuousQueries(dbName string) error {
 	queryStrings := map[string]string{}
 
 	queryStrings[InfluxDBContinuousQueryDownSampling] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT count(%v) as total INTO %v FROM %v GROUP BY time(%v) END",
-		InfluxDBContinuousQueryDownSampling, dbName, utils.ToSnakeCase(HTTPHeaderRequestID), InfluxDBMeasurementDownSampling, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod)
+		InfluxDBContinuousQueryDownSampling, dbName, utils.ToSnakeCase(ValueFieldKey), InfluxDBMeasurementDownSampling, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod)
 	queryStrings[InfluxDBContinuousQueryByAppVersion] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT count(%v) as total INTO %v FROM %v GROUP BY time(%v),%v END",
-		InfluxDBContinuousQueryByAppVersion, dbName, utils.ToSnakeCase(HTTPHeaderRequestID), InfluxDBMeasurementByAppVersion, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod, InfluxDBTagAppVersion)
+		InfluxDBContinuousQueryByAppVersion, dbName, utils.ToSnakeCase(ValueFieldKey), InfluxDBMeasurementByAppVersion, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod, InfluxDBTagAppVersion)
 	queryStrings[InfluxDBContinuousQueryByCountryCode] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT count(%v) as total INTO %v FROM %v GROUP BY time(%v),%v END",
-		InfluxDBContinuousQueryByCountryCode, dbName, utils.ToSnakeCase(HTTPHeaderRequestID), InfluxDBMeasurementByCountryCode, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod, InfluxDBTagLocationCountryISOCode)
+		InfluxDBContinuousQueryByCountryCode, dbName, utils.ToSnakeCase(ValueFieldKey), InfluxDBMeasurementByCountryCode, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod, InfluxDBTagLocationCountryISOCode)
 
 	for queryName, queryString := range queryStrings {
 		query := influxcli.NewQuery(queryString, "", "")
@@ -373,19 +374,12 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 		publicIP = xForwaredFor[l-1]
 	}
 
-	xRequestId := httpReq.Header[HTTPHeaderRequestID]
-	requestID := ""
-	if len(xRequestId) > 0 {
-		requestID = xRequestId[0]
-	}
-
 	// We use IP to find the location but we don't store IP
 	loc, err := s.getLocation(publicIP)
 	if err != nil {
 		logrus.Error("Failed to get location for one ip")
 	}
-	logrus.Debugf("HTTP request: RequestID \"%v\", Location %+v, req %v",
-		requestID, loc, req)
+	logrus.Debugf("HTTP request: Location %+v, req %v", loc, req)
 
 	if s.influxClient != nil {
 		var (
@@ -405,7 +399,7 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 			tags[utils.ToSnakeCase(k)] = v
 		}
 		fields := map[string]interface{}{
-			utils.ToSnakeCase(HTTPHeaderRequestID): requestID,
+			utils.ToSnakeCase(ValueFieldKey): ValueFieldValue,
 		}
 		if loc != nil {
 			tags[InfluxDBTagLocationCity] = loc.City
