@@ -80,14 +80,13 @@ type CheckUpgradeRequest struct {
 }
 
 type CheckUpgradeResponse struct {
-	Versions []Version `json:"versions"`
+	Versions                 []Version `json:"versions"`
+	RequestIntervalInMinutes int       `json:"requestIntervalInMinutes"`
 }
 
 func NewServer(done chan struct{}, applicationName, configFile, influxURL, influxUser, influxPass, queryPeriod, geodb string) (*Server, error) {
 	InfluxDBDatabase = applicationName + "_" + InfluxDBDatabase
-	if queryPeriod != "" {
-		InfluxDBContinuousQueryPeriod = queryPeriod
-	}
+	InfluxDBContinuousQueryPeriod = queryPeriod
 
 	path := filepath.Clean(configFile)
 	f, err := os.Open(path)
@@ -323,6 +322,14 @@ func (s *Server) GenerateCheckUpgradeResponse(request *CheckUpgradeRequest) (*Ch
 
 	for _, v := range s.VersionMap {
 		resp.Versions = append(resp.Versions, *v)
+	}
+
+	d, err := time.ParseDuration(InfluxDBContinuousQueryPeriod)
+	if err != nil {
+		logrus.Errorf("fail to parse InfluxDBContinuousQueryPeriod while building upgrade response: %v", err)
+		resp.RequestIntervalInMinutes = 60
+	} else {
+		resp.RequestIntervalInMinutes = int(d.Minutes())
 	}
 
 	return resp, nil

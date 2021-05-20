@@ -6,8 +6,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 
 	"github.com/longhorn/upgrade-responder/upgraderesponder"
@@ -93,7 +95,8 @@ func UpgradeResponderCmd() cli.Command {
 			cli.StringFlag{
 				Name:   FlagQueryPeriod,
 				EnvVar: EnvQueryPeriod,
-				Usage:  "Specify the period for how often each instance of the application makes the request. Cannot change after set for the first time. The default value is 1h. This value should be the same as time in GROUP BY clause in Grafana",
+				Value:  "1h",
+				Usage:  "Specify the period for how often each instance of the application makes the request. Cannot change after set for the first time. This value should be the same as time in GROUP BY clause in Grafana",
 			},
 			cli.StringFlag{
 				Name:   FlagGeoDB,
@@ -169,6 +172,11 @@ func validateCommandLineArguments(c *cli.Context) error {
 	applicationName := c.String(FlagApplicationName)
 	if applicationName == "" {
 		return fmt.Errorf("no application name specified")
+	}
+
+	queryPeriod := c.String(FlagQueryPeriod)
+	if _, err := time.ParseDuration(queryPeriod); err != nil {
+		return errors.Wrap(err, "fail to parse --query-period")
 	}
 
 	return nil

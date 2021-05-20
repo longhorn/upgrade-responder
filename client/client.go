@@ -34,7 +34,8 @@ type CheckUpgradeRequest struct {
 }
 
 type CheckUpgradeResponse struct {
-	Versions []Version `json:"versions"`
+	Versions                 []Version `json:"versions"`
+	RequestIntervalInMinutes int       `json:"requestIntervalInMinutes"`
 }
 
 func NewUpgradeChecker(address string, upgradeRequester UpgradeRequester) *UpgradeChecker {
