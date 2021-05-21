@@ -25,6 +25,10 @@ For example, Longhorn uses Upgrade Responder project to create the public metric
 * Country and City of the request originated from
 * (Optional) Application specified information that's can be helpful to identify the upgradability, e.g. Kubernetes version that application is running on.
 
+## Prerequisite
+1. InfluxDB <= 1.8.x is running. We currently only support InfluxDB version <= 1.8.x.
+1. Grafana v7.x is running
+
 ## Usage
 
 ### 1. Running Upgrade Responder server
@@ -46,6 +50,10 @@ The available flags are:
 | `--port` | `8314` | Specify the port number. By default port `8314` is used |
 
 If you are deploying Upgrade Responder Server in Kubernetes, you can use our provided [chart](./chart).
+
+> **Note:** For now, the Upgrade Responder server needs to sit behind a LoadBalancer or a proxy to get the client's IP from the field `X-Forwarded-For` and extract the location from the IP. 
+> If you are deploying the Upgrade Responder server in Kubernetes, you can create an ingress to the `xxx-upgrade-responder` service so that Upgrade Responder server is behind a LoadBalancer. 
+> Then send the request to the ingress's domain.
 
 As a quick way to check Upgrade Responder server is up and running, make a request to it:
 ```shell
@@ -143,10 +151,6 @@ In order to display statical information about Kubernetes version on Grafana das
 
 1. Create a Grafana panel that pull data from the new measurement `by_kubernetes_version_down_sampling` similar to this:
    ![Alt text](./assets/images/grafana_query_by_kubernetes_version.png?raw=true)
-   
-
-### InfluxDB
-We currently only support InfluxDB version <= 1.8.x.
 
 ### The flag `--query-period`
 This value should match the frequency that your application send requests to the Upgrade Responder server.
