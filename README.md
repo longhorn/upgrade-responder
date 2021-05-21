@@ -54,7 +54,7 @@ curl -X POST http://<SERVER-IP>:8314/v1/checkupgrade \
 ```
 If the server is running correctly, you should receive a response contains the application's latest version stored in [upgrade-response.json](#response-json-config-example):
 ```shell
-{"versions":[{"Name":"v1.0.0","ReleaseDate":"2020-05-30T10:20:00Z","Tags":["latest"]}]}
+{"versions":[{"Name":"v1.0.0","ReleaseDate":"2020-05-30T10:20:00Z","Tags":["latest"]}],"requestIntervalInMinutes":60}
 ```
 
 The InfluxDB should contain a new record:
@@ -77,15 +77,15 @@ Assume that you already have a running Grafana instance. Use the following steps
    and change the `AppName` to be the name of your application.
    ![Alt text](./assets/images/import_grafana_dashboard_for_upgrade_responder.png?raw=true)
 1. If you specify `-query-period` to be different than `1h`, 
-   you need to change the time in GROUP BY clause in Grafana dashboard queries to match `-query-period`
+   you need to change the time in GROUP BY clause in Grafana dashboard queries to be multiple of `-query-period` value
 
 Upon success, you should see a dashboard similar to:
 ![Alt text](./assets/images/longhorn_upgrade_responder_dashboard.png?raw=true)
 
 ### 3. Modifying your application
 
-Modify your application to periodically send the request to Upgrade Responder server every `--query-period`.
-The default value for `--query-period` is one hour. So your application should send one `POST` request every one hour. 
+Modify your application to periodically send the request to Upgrade Responder server every `requestIntervalInMinutes` where `requestIntervalInMinutes` is the value returned from Upgrade Responder sever when your application makes an upgrade request to it. 
+Your application should send one `POST` request every `requestIntervalInMinutes`. 
 The request's body should be in the format:
    ```json
    {
