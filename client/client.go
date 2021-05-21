@@ -10,10 +10,10 @@ import (
 )
 
 type UpgradeChecker struct {
-	Address          string
-	UpgradeRequester UpgradeRequester
-	queryPeriod      time.Duration
-	stopCh           chan struct{}
+	Address                string
+	UpgradeRequester       UpgradeRequester
+	DefaultRequestInterval time.Duration
+	stopCh                 chan struct{}
 }
 
 type UpgradeRequester interface {
@@ -40,10 +40,10 @@ type CheckUpgradeResponse struct {
 
 func NewUpgradeChecker(address string, upgradeRequester UpgradeRequester) *UpgradeChecker {
 	return &UpgradeChecker{
-		Address:          address,
-		UpgradeRequester: upgradeRequester,
-		queryPeriod:      1 * time.Hour,
-		stopCh:           make(chan struct{}),
+		Address:                address,
+		UpgradeRequester:       upgradeRequester,
+		DefaultRequestInterval: 1 * time.Hour,
+		stopCh:                 make(chan struct{}),
 	}
 }
 
@@ -52,13 +52,22 @@ func (c *UpgradeChecker) Start() {
 }
 
 func (c *UpgradeChecker) run() {
-	ticker := time.NewTicker(c.queryPeriod)
-	defer ticker.Stop()
+	requestInterval := c.DefaultRequestInterval
+
+	doWork := func() {
+		resp, err := c.CheckUpgrade(c.UpgradeRequester.GetCurrentVersion(), c.UpgradeRequester.GetExtraInfo())
+		if err == nil && resp.RequestIntervalInMinutes > 0 {
+			requestInterval = time.Duration(resp.RequestIntervalInMinutes) * time.Minute
+		}
+		c.UpgradeRequester.ProcessUpgradeResponse(resp, err)
+	}
+
+	doWork()
+
 	for {
 		select {
-		case <-ticker.C:
-			resp, err := c.CheckUpgrade(c.UpgradeRequester.GetCurrentVersion(), c.UpgradeRequester.GetExtraInfo())
-			c.UpgradeRequester.ProcessUpgradeResponse(resp, err)
+		case <-time.After(requestInterval):
+			doWork()
 		case <-c.stopCh:
 			return
 		}
@@ -74,8 +83,8 @@ func (c *UpgradeChecker) Stop() {
 	}
 }
 
-func (c *UpgradeChecker) SetQueryPeriod(queryPeriod time.Duration) {
-	c.queryPeriod = queryPeriod
+func (c *UpgradeChecker) SetDefaultRequestInterval(interval time.Duration) {
+	c.DefaultRequestInterval = interval
 }
 
 // CheckUpgrade sends a request that contains the current version of the application and any extra information to the Upgrade Responder server.
