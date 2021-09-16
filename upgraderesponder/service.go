@@ -162,7 +162,7 @@ func (s *Server) createDB(name string) error {
 }
 
 func (s *Server) validateAndLoadResponseConfig(config *ResponseConfig) error {
-	for _, v := range config.Versions {
+	for i, v := range config.Versions {
 		if len(v.Tags) == 0 {
 			return fmt.Errorf("invalid empty label for %v", v)
 		}
@@ -179,9 +179,9 @@ func (s *Server) validateAndLoadResponseConfig(config *ResponseConfig) error {
 			if s.TagVersionMap[l] != nil {
 				return fmt.Errorf("invalid duplicate label %v", l)
 			}
-			s.TagVersionMap[l] = &v
+			s.TagVersionMap[l] = &config.Versions[i]
 		}
-		s.VersionMap[v.Name] = &v
+		s.VersionMap[v.Name] = &config.Versions[i]
 	}
 	if s.TagVersionMap[VersionTagLatest] == nil {
 		return fmt.Errorf("no latest label specified")
@@ -236,44 +236,11 @@ func respondWithJSON(rw http.ResponseWriter, obj interface{}) error {
 	return err
 }
 
-func (s *Server) getParsedVersionWithTag(tag string) (*semver.Version, *Version, error) {
-	v, exists := s.TagVersionMap[tag]
-	if !exists {
-		return nil, nil, fmt.Errorf("cannot find version with tag %v", tag)
-	}
-	ver, err := semver.NewVersion(v.Name)
-	if err != nil {
-		return nil, nil, errors.Wrapf(err, "version %v is not valid with tag %v", v.Name, tag)
-	}
-	return ver, v, nil
-}
-
 func (s *Server) GenerateCheckUpgradeResponse(request *CheckUpgradeRequest) (*CheckUpgradeResponse, error) {
-	/* disable version dependency reseponse
-	reqVer, err := semver.NewVersion(request.LonghornVersion)
-	if err != nil {
-		logrus.Warnf("Invalid version in request: %v: %v, response with the latest version", request.LonghornVersion, err)
-		reqVer, err = semver.NewVersion(LonghornMinimalVersion)
-		if err != nil {
-			return nil, err
-		}
-	}
-	*/
 	resp := &CheckUpgradeResponse{}
-
-	// Only supports `latest` label for now
-	//latestVer, version, err := s.getParsedVersionWithTag(VersionTagLatest)
-	_, version, err := s.getParsedVersionWithTag(VersionTagLatest)
-	if err != nil {
-		logrus.Errorf("BUG: unable to get an valid tag for %v: %v", VersionTagLatest, err)
-		return nil, err
+	for _, v := range s.VersionMap {
+		resp.Versions = append(resp.Versions, *v)
 	}
-	/* disable version dependency reseponse
-	if reqVer.LessThan(latestVer) {
-		resp.Versions = append(resp.Versions, *version)
-	}
-	*/
-	resp.Versions = append(resp.Versions, *version)
 	return resp, nil
 }
 
