@@ -15,7 +15,7 @@ steps:
   - name: docker
     path: /var/run/docker.sock
 
-- name: docker-publish-master
+- name: publish-image
   image: plugins/docker
   settings:
     context: package/
@@ -24,17 +24,14 @@ steps:
     password:
       from_secret: docker_password
     repo: "longhornio/upgrade-responder"
-    tag: latest
+    tag: "${DRONE_BRANCH}-head"
     username:
       from_secret: docker_username
   when:
-    ref:
-      include:
-      - "refs/heads/master"
     event:
     - push
 
-- name: docker-publish
+- name: publish-tagged-image
   image: plugins/docker
   settings:
     context: package/
@@ -48,9 +45,7 @@ steps:
       from_secret: docker_username
   when:
     instance:
-    - drone-publish.rancher.io
-    ref:
-    - refs/tags/*
+    - drone-publish.longhorn.io
     event:
     - tag
 
