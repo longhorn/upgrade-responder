@@ -1,6 +1,11 @@
 Longhorn Upgrade Responder[![Build Status](https://drone-publish.longhorn.io/api/badges/longhorn/upgrade-responder/status.svg)](https://drone-publish.longhorn.io/longhorn/upgrade-responder)
 ========
 
+> **Note:** This branch (v0.0.x) is the old version that is used exclusively by the Longhorn project. 
+> Longhorn eventually will need to migrate to v0.1.x which is a generic version. 
+> However, the migration is a big effort because we need to migrate the InfluxDB database. 
+> So, Longhorn keeps using the v0.0.x for now.
+
 ## Building
 
 `make`
