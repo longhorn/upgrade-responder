@@ -49,11 +49,11 @@ var (
 )
 
 type Server struct {
-	done          chan struct{}
-	VersionMap    map[string]*Version
-	TagVersionMap map[string]*Version
-	influxClient  influxcli.Client
-	db            *maxminddb.Reader
+	done           chan struct{}
+	VersionMap     map[string]*Version
+	TagVersionsMap map[string][]*Version
+	influxClient   influxcli.Client
+	db             *maxminddb.Reader
 }
 
 type Location struct {
@@ -100,9 +100,9 @@ func NewServer(done chan struct{}, applicationName, configFile, influxURL, influ
 		return nil, err
 	}
 	s := &Server{
-		done:          done,
-		VersionMap:    map[string]*Version{},
-		TagVersionMap: map[string]*Version{},
+		done:           done,
+		VersionMap:     map[string]*Version{},
+		TagVersionsMap: map[string][]*Version{},
 	}
 	if err := s.validateAndLoadResponseConfig(&config); err != nil {
 		return nil, err
@@ -220,14 +220,11 @@ func (s *Server) validateAndLoadResponseConfig(config *ResponseConfig) error {
 			return err
 		}
 		for _, l := range v.Tags {
-			if s.TagVersionMap[l] != nil {
-				return fmt.Errorf("invalid duplicate label %v", l)
-			}
-			s.TagVersionMap[l] = &config.Versions[i]
+			s.TagVersionsMap[l] = append(s.TagVersionsMap[l], &config.Versions[i])
 		}
 		s.VersionMap[v.Name] = &config.Versions[i]
 	}
-	if s.TagVersionMap[VersionTagLatest] == nil {
+	if len(s.TagVersionsMap[VersionTagLatest]) == 0 {
 		return fmt.Errorf("no latest label specified")
 	}
 	return nil
@@ -279,18 +276,6 @@ func respondWithJSON(rw http.ResponseWriter, obj interface{}) error {
 	rw.WriteHeader(http.StatusOK)
 	_, err = rw.Write(response)
 	return err
-}
-
-func (s *Server) getParsedVersionWithTag(tag string) (*semver.Version, *Version, error) {
-	v, exists := s.TagVersionMap[tag]
-	if !exists {
-		return nil, nil, fmt.Errorf("cannot find version with tag %v", tag)
-	}
-	ver, err := semver.NewVersion(v.Name)
-	if err != nil {
-		return nil, nil, errors.Wrapf(err, "version %v is not valid with tag %v", v.Name, tag)
-	}
-	return ver, v, nil
 }
 
 func (s *Server) GenerateCheckUpgradeResponse(request *CheckUpgradeRequest) (*CheckUpgradeResponse, error) {
