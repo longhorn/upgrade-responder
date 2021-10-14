@@ -20,6 +20,13 @@
       "Tags": [
         "latest"
       ]
+    },
+    {
+      "Name": "v1.2.2",
+      "ReleaseDate": "2021-10-08T00:00:00Z",
+      "Tags": [
+        "latest"
+      ]
     }
   ]
 }
