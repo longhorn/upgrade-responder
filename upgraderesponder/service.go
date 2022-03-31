@@ -279,22 +279,23 @@ func canonializeField(name string) string {
 
 // Don't need to return error to the requester
 func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) {
-	xForwaredFor := httpReq.Header[HTTPHeaderXForwardedFor]
+	//xForwaredFor := httpReq.Header[HTTPHeaderXForwardedFor]
 	requestID := httpReq.Header[HTTPHeaderRequestID]
-	publicIP := ""
-	l := len(xForwaredFor)
-	if l != 0 {
-		// rightmost IP must be the public IP
-		publicIP = xForwaredFor[l-1]
-	}
+	//publicIP := ""
+	//l := len(xForwaredFor)
+	//if l != 0 {
+	//	// rightmost IP must be the public IP
+	//	publicIP = xForwaredFor[l-1]
+	//}
 
 	// We use IP to find the location but we don't store IP
-	loc, err := s.getLocation(publicIP)
-	if err != nil {
-		logrus.Errorf("Failed to get location for one ip")
-	}
-	logrus.Debugf("HTTP request: RequestID \"%v\", Location %+v, req %v",
-		requestID, loc, req)
+	//loc, err := s.getLocation(publicIP)
+	//if err != nil {
+	//	logrus.Errorf("Failed to get location for one ip")
+	//}
+	//logrus.Debugf("HTTP request: RequestID \"%v\", Location %+v, req %v",
+	//	requestID, loc, req)
+	var loc *Location = nil
 
 	if s.influxClient != nil {
 		var (
