@@ -1,13 +1,6 @@
 {
   "Versions": [
     {
-      "Name": "v1.0.2",
-      "ReleaseDate": "2020-08-14T18:00:00Z",
-      "Tags": [
-        "stable"
-      ]
-    },
-    {
       "Name": "v1.1.3",
       "ReleaseDate": "2021-12-17T00:00:00Z",
       "Tags": [
