@@ -69,9 +69,11 @@ type ResponseConfig struct {
 }
 
 type Version struct {
-	Name        string // must be in semantic versioning
-	ReleaseDate string
-	Tags        []string
+	Name                 string // must be in semantic versioning
+	ReleaseDate          string
+	MinUpgradableVersion string // can be empty or semantic versioning
+	Tags                 []string
+	ExtraInfo            map[string]string
 }
 
 type CheckUpgradeRequest struct {
@@ -215,6 +217,11 @@ func (s *Server) validateAndLoadResponseConfig(config *ResponseConfig) error {
 		}
 		if _, err := semver.NewVersion(v.Name); err != nil {
 			return err
+		}
+		if v.MinUpgradableVersion != "" {
+			if _, err := semver.NewVersion(v.MinUpgradableVersion); err != nil {
+				return err
+			}
 		}
 		if _, err := ParseTime(v.ReleaseDate); err != nil {
 			return err
