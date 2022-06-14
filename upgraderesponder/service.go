@@ -77,8 +77,25 @@ type Version struct {
 }
 
 type CheckUpgradeRequest struct {
-	AppVersion string            `json:"appVersion"`
-	ExtraInfo  map[string]string `json:"extraInfo"`
+	AppVersion string `json:"appVersion"`
+	// We would like to use longhorn/upgrade-responder for harvester.
+	// However, harvester/upgrade-responder uses HarvesterVersion in request body, so we add a field here.
+	// We will remove this field after all customers' Harvester version update to v1.1.0.
+	HarvesterVersion string            `json:"harvesterVersion"`
+	ExtraInfo        map[string]string `json:"extraInfo"`
+}
+
+// GetVersion returns version from AppVersion and HarvesterVersion.
+// Only if AppVersion is empty and HarvesterVersion is not, we return HarvesterVersion.
+// We will remove this function after all customers' Harvester version update to v1.1.0.
+func (r *CheckUpgradeRequest) GetVersion() string {
+	if r.AppVersion != "" {
+		return r.AppVersion
+	}
+	if r.HarvesterVersion != "" {
+		return r.HarvesterVersion
+	}
+	return ""
 }
 
 type CheckUpgradeResponse struct {
@@ -392,7 +409,7 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 		}()
 
 		tags := map[string]string{
-			InfluxDBTagAppVersion: req.AppVersion,
+			InfluxDBTagAppVersion: req.GetVersion(),
 		}
 		for k, v := range req.ExtraInfo {
 			tags[utils.ToSnakeCase(k)] = v
