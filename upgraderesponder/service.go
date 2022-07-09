@@ -79,6 +79,22 @@ type Version struct {
 type CheckUpgradeRequest struct {
 	AppVersion string            `json:"appVersion"`
 	ExtraInfo  map[string]string `json:"extraInfo"`
+	// Existing Longhorn deployments send longhornVersion and kubernetesVersion instead of
+	// appVersion and extraInfo.kubernetesVersion. Therefore, we need to include the below 2 fields.
+	// We can remove these field once most of existing Longhorn deployments send appVersion and extraInfo.kubernetesVersion
+	LonghornVersion   string `json:"longhornVersion"`
+	KubernetesVersion string `json:"kubernetesVersion"`
+}
+
+// We can remove these field once most of existing Longhorn deployments send appVersion
+func (r *CheckUpgradeRequest) GetAppVersion() string {
+	if r.AppVersion != "" {
+		return r.AppVersion
+	}
+	if r.LonghornVersion != "" {
+		return r.LonghornVersion
+	}
+	return ""
 }
 
 type CheckUpgradeResponse struct {
@@ -365,20 +381,21 @@ func (s *Server) getLocation(addr string) (*Location, error) {
 
 // Don't need to return error to the requester
 func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) {
-	xForwaredFor := httpReq.Header[HTTPHeaderXForwardedFor]
-	publicIP := ""
-	l := len(xForwaredFor)
-	if l > 0 {
-		// rightmost IP must be the public IP
-		publicIP = xForwaredFor[l-1]
-	}
+	//xForwaredFor := httpReq.Header[HTTPHeaderXForwardedFor]
+	//publicIP := ""
+	//l := len(xForwaredFor)
+	//if l > 0 {
+	//	// rightmost IP must be the public IP
+	//	publicIP = xForwaredFor[l-1]
+	//}
 
 	// We use IP to find the location but we don't store IP
-	loc, err := s.getLocation(publicIP)
-	if err != nil {
-		logrus.Error("Failed to get location for one ip")
-	}
-	logrus.Debugf("HTTP request: Location %+v, req %v", loc, req)
+	//loc, err := s.getLocation(publicIP)
+	//if err != nil {
+	//	logrus.Error("Failed to get location for one ip")
+	//}
+	//logrus.Debugf("HTTP request: Location %+v, req %v", loc, req)
+	var loc *Location = nil
 
 	if s.influxClient != nil {
 		var (
@@ -392,7 +409,11 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 		}()
 
 		tags := map[string]string{
-			InfluxDBTagAppVersion: req.AppVersion,
+			InfluxDBTagAppVersion: req.GetAppVersion(),
+		}
+		// We can remove these field once most of existing Longhorn deployments send extraInfo.kubernetesVersion
+		if req.KubernetesVersion != "" {
+			tags[InfluxDBTagKubernetesVersion] = req.KubernetesVersion
 		}
 		for k, v := range req.ExtraInfo {
 			tags[utils.ToSnakeCase(k)] = v
