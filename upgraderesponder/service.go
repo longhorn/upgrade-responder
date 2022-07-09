@@ -365,20 +365,21 @@ func (s *Server) getLocation(addr string) (*Location, error) {
 
 // Don't need to return error to the requester
 func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) {
-	xForwaredFor := httpReq.Header[HTTPHeaderXForwardedFor]
-	publicIP := ""
-	l := len(xForwaredFor)
-	if l > 0 {
-		// rightmost IP must be the public IP
-		publicIP = xForwaredFor[l-1]
-	}
+	//xForwaredFor := httpReq.Header[HTTPHeaderXForwardedFor]
+	//publicIP := ""
+	//l := len(xForwaredFor)
+	//if l > 0 {
+	//	// rightmost IP must be the public IP
+	//	publicIP = xForwaredFor[l-1]
+	//}
 
 	// We use IP to find the location but we don't store IP
-	loc, err := s.getLocation(publicIP)
-	if err != nil {
-		logrus.Error("Failed to get location for one ip")
-	}
-	logrus.Debugf("HTTP request: Location %+v, req %v", loc, req)
+	//loc, err := s.getLocation(publicIP)
+	//if err != nil {
+	//	logrus.Error("Failed to get location for one ip")
+	//}
+	//logrus.Debugf("HTTP request: Location %+v, req %v", loc, req)
+	var loc *Location = nil
 
 	if s.influxClient != nil {
 		var (
