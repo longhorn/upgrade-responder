@@ -1,5 +1,10 @@
 # Upgrade Responder[![Build Status](https://drone-publish.longhorn.io/api/badges/longhorn/upgrade-responder/status.svg)](https://drone-publish.longhorn.io/longhorn/upgrade-responder)
 
+> Note: Because many existing Longhorn deployments are sending `longhornVersion` instead of `appVersion` in the request body and Longhorn currently disables location collecting,
+> this branch is serving as a temporary solution specifically for Longhorn project. Until these blockers are removed, Longhorn
+> can switch back to use the master branch
+
+
 ## Overview
 Upgrade Responder provides a way to notify the applications running remotely when there is a new version of the application become available. 
 It will also keep a record of how many requests have been sent to the Upgrade Responder server during a certain period of time(e.g. one hour), to estimate how many instances of applications are running during that period.

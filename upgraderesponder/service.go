@@ -79,6 +79,22 @@ type Version struct {
 type CheckUpgradeRequest struct {
 	AppVersion string            `json:"appVersion"`
 	ExtraInfo  map[string]string `json:"extraInfo"`
+	// Existing Longhorn deployments send longhornVersion and kubernetesVersion instead of
+	// appVersion and extraInfo.kubernetesVersion. Therefore, we need to include the below 2 fields.
+	// We can remove these field once most of existing Longhorn deployments send appVersion and extraInfo.kubernetesVersion
+	LonghornVersion   string `json:"longhornVersion"`
+	KubernetesVersion string `json:"kubernetesVersion"`
+}
+
+// We can remove these field once most of existing Longhorn deployments send appVersion
+func (r *CheckUpgradeRequest) GetAppVersion() string {
+	if r.AppVersion != "" {
+		return r.AppVersion
+	}
+	if r.LonghornVersion != "" {
+		return r.LonghornVersion
+	}
+	return ""
 }
 
 type CheckUpgradeResponse struct {
@@ -393,7 +409,11 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 		}()
 
 		tags := map[string]string{
-			InfluxDBTagAppVersion: req.AppVersion,
+			InfluxDBTagAppVersion: req.GetAppVersion(),
+		}
+		// We can remove these field once most of existing Longhorn deployments send extraInfo.kubernetesVersion
+		if req.KubernetesVersion != "" {
+			tags[InfluxDBTagKubernetesVersion] = req.KubernetesVersion
 		}
 		for k, v := range req.ExtraInfo {
 			tags[utils.ToSnakeCase(k)] = v
