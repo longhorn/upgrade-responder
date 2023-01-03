@@ -15,8 +15,15 @@
       ]
     },
     {
-      "Name": "v1.3.0",
-      "ReleaseDate": "2022-06-15T00:00:00Z",
+      "Name": "v1.3.2",
+      "ReleaseDate": "2022-10-14T00:00:00Z",
+      "Tags": [
+        "stable"
+      ]
+    },
+    {
+      "Name": "v1.4.0",
+      "ReleaseDate": "2022-12-30T00:00:00Z",
       "Tags": [
         "latest"
       ]
