@@ -34,6 +34,10 @@ const (
 	EnvGeoDB                         = "GEODB"
 	FlagPort                         = "port"
 	EnvPort                          = "PORT"
+	FlagCacheSyncInterval            = "cache-sync-interval"
+	EnvCacheSyncInterval             = "CACHE_SYNC_INTERVAL"
+	FlagCacheSize                    = "cache-size"
+	EnvCacheSize                     = "CACHE_SIZE"
 )
 
 func main() {
@@ -109,6 +113,18 @@ func UpgradeResponderCmd() cli.Command {
 				Value:  8314,
 				Usage:  "Specify the port number",
 			},
+			cli.IntFlag{
+				Name:   FlagCacheSyncInterval,
+				EnvVar: EnvCacheSyncInterval,
+				Value:  1,
+				Usage:  "Specify the period for how often the server should sync data to database. Measured in second. The server aggregates the client requests before writing to influxDB.",
+			},
+			cli.IntFlag{
+				Name:   FlagCacheSize,
+				EnvVar: EnvCacheSize,
+				Value:  100,
+				Usage:  "Specify the cache size of server. Once the number of data points in cache is bigger than cache size, the server flush and write all data in the cache to influxDB.",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			return startUpgradeResponder(c)
@@ -129,9 +145,11 @@ func startUpgradeResponder(c *cli.Context) error {
 	applicationName := c.String(FlagApplicationName)
 	geodb := c.String(FlagGeoDB)
 	port := c.Int(FlagPort)
+	cacheSyncInterval := c.Int(FlagCacheSyncInterval)
+	cacheSize := c.Int(FlagCacheSize)
 
 	done := make(chan struct{})
-	server, err := upgraderesponder.NewServer(done, applicationName, cfg, influxURL, influxUser, influxPass, queryPeriod, geodb)
+	server, err := upgraderesponder.NewServer(done, applicationName, cfg, influxURL, influxUser, influxPass, queryPeriod, geodb, cacheSyncInterval, cacheSize)
 	if err != nil {
 		return err
 	}

@@ -54,6 +54,7 @@ type Server struct {
 	TagVersionsMap map[string][]*Version
 	influxClient   influxcli.Client
 	db             *maxminddb.Reader
+	dbCache        *DBCache
 }
 
 type Location struct {
@@ -86,7 +87,7 @@ type CheckUpgradeResponse struct {
 	RequestIntervalInMinutes int       `json:"requestIntervalInMinutes"`
 }
 
-func NewServer(done chan struct{}, applicationName, configFile, influxURL, influxUser, influxPass, queryPeriod, geodb string) (*Server, error) {
+func NewServer(done chan struct{}, applicationName, configFile, influxURL, influxUser, influxPass, queryPeriod, geodb string, cacheSyncInterval, cacheSize int) (*Server, error) {
 	InfluxDBDatabase = applicationName + "_" + InfluxDBDatabase
 	InfluxDBContinuousQueryPeriod = queryPeriod
 
@@ -154,6 +155,14 @@ func NewServer(done chan struct{}, applicationName, configFile, influxURL, influ
 			}
 		}
 	}()
+
+	dbCache, err := NewDBCache(InfluxDBDatabase, InfluxDBPrecisionNanosecond, time.Duration(cacheSyncInterval)*time.Second, cacheSize, s.influxClient)
+	if err != nil {
+		return nil, err
+	}
+	s.dbCache = dbCache
+	go s.dbCache.Run(done)
+
 	return s, nil
 }
 
@@ -410,23 +419,6 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 			return
 		}
 
-		if err = s.addPoint(pt, InfluxDBDatabase, InfluxDBPrecisionNanosecond); err != nil {
-			return
-		}
+		s.dbCache.AddPoint(pt)
 	}
-}
-
-func (s *Server) addPoint(pt *influxcli.Point, db, precision string) error {
-	bp, err := influxcli.NewBatchPoints(influxcli.BatchPointsConfig{
-		Database:  db,
-		Precision: precision,
-	})
-	if err != nil {
-		return err
-	}
-	bp.AddPoint(pt)
-	if err = s.influxClient.Write(bp); err != nil {
-		return err
-	}
-	return nil
 }
