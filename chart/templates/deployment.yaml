@@ -45,6 +45,10 @@ spec:
                 key: influxDBPassword
           - name: PORT
             value: "{{ .Values.service.port }}"
+          - name: CACHE_SYNC_INTERVAL
+            value: "{{ .Values.flags.cacheSyncInterval }}"
+          - name: CACHE_SIZE
+            value: "{{ .Values.flags.cacheSize }}"
           command:
           - upgrade-responder
           args:
@@ -62,6 +66,10 @@ spec:
           - $(INFLUXDB_PASSWORD)
           - --port
           - $(PORT)
+          - --cache-sync-interval
+          - $(CACHE_SYNC_INTERVAL)
+          - --cache-size
+          - $(CACHE_SIZE)
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
