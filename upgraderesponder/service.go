@@ -266,7 +266,6 @@ func (s *Server) CheckUpgrade(rw http.ResponseWriter, req *http.Request) {
 	if err = json.NewDecoder(req.Body).Decode(&checkReq); err != nil {
 		return
 	}
-	logrus.Debugf("Request %v", &checkReq)
 
 	s.recordRequest(req, &checkReq)
 
@@ -387,7 +386,6 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 	if err != nil {
 		logrus.Error("Failed to get location for one ip")
 	}
-	logrus.Debugf("HTTP request: Location %+v, req %v", loc, req)
 
 	if s.influxClient != nil {
 		var (
