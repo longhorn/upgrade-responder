@@ -39,6 +39,10 @@ service:
   type: ClusterIP
   port: 8314
 
+flags:
+  cacheSyncInterval: 1
+  cacheSize: 100
+
 ingress:
   enabled: false
   annotations:
