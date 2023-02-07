@@ -1,10 +1,6 @@
 FROM golang:1.15-alpine
 
 RUN apk -U add bash git gcc musl-dev docker vim less file curl wget ca-certificates
-RUN go get -d golang.org/x/lint/golint && \
-    git -C /go/src/golang.org/x/lint/golint checkout -b current 06c8688daad7faa9da5a0c2f163a3d14aac986ca && \
-    go install golang.org/x/lint/golint && \
-    rm -rf /go/src /go/pkg
 RUN go get -d github.com/alecthomas/gometalinter && \
     git -C /go/src/github.com/alecthomas/gometalinter checkout -b current v2.0.11 && \
     go install github.com/alecthomas/gometalinter && \
