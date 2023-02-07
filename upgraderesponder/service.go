@@ -282,7 +282,6 @@ func (s *Server) CheckUpgrade(rw http.ResponseWriter, req *http.Request) {
 	if err = json.NewDecoder(req.Body).Decode(&checkReq); err != nil {
 		return
 	}
-	logrus.Debugf("Request %v", &checkReq)
 
 	s.recordRequest(req, &checkReq)
 
