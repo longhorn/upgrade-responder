@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 )
@@ -110,7 +110,7 @@ func (c *UpgradeChecker) CheckUpgrade(currentAppVersion string, extraInfo map[st
 	defer r.Body.Close()
 	if r.StatusCode != http.StatusOK {
 		message := ""
-		messageBytes, err := ioutil.ReadAll(r.Body)
+		messageBytes, err := io.ReadAll(r.Body)
 		if err != nil {
 			message = err.Error()
 		} else {
