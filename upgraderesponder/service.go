@@ -22,6 +22,9 @@ const (
 	VersionTagLatest  = "latest"
 	AppMinimalVersion = "v0.0.1"
 
+	InfluxDBContinuousQueryFmt = "cq_by_%s_down_sampling"
+	InfluxDBMeasurementFmt     = "by_%s_down_sampling"
+
 	InfluxDBMeasurement              = "upgrade_request"
 	InfluxDBMeasurementDownSampling  = "upgrade_request_down_sampling"
 	InfluxDBMeasurementByAppVersion  = "by_app_version_down_sampling"
@@ -198,6 +201,38 @@ func (s *Server) createContinuousQueries(dbName string) error {
 		InfluxDBContinuousQueryByAppVersion, dbName, utils.ToSnakeCase(ValueFieldKey), InfluxDBMeasurementByAppVersion, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod, InfluxDBTagAppVersion)
 	queryStrings[InfluxDBContinuousQueryByCountryCode] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT count(%v) as total INTO %v FROM %v GROUP BY time(%v),%v END",
 		InfluxDBContinuousQueryByCountryCode, dbName, utils.ToSnakeCase(ValueFieldKey), InfluxDBMeasurementByCountryCode, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod, InfluxDBTagLocationCountryISOCode)
+
+	showTagKeys := influxcli.NewQuery(fmt.Sprintf("SHOW TAG KEYS FROM %s", InfluxDBMeasurement), dbName, "")
+	showTagKeysResp, err := s.influxClient.Query(showTagKeys)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get all tag keys from %s", InfluxDBMeasurement)
+	}
+
+	excludeTags := map[string]bool{
+		InfluxDBTagAppVersion:             true,
+		InfluxDBTagLocationCountryISOCode: true,
+	}
+	// Parse the result and store the tag keys in a slice
+	var tagKeys []string
+	for _, result := range showTagKeysResp.Results {
+		for _, series := range result.Series {
+			for _, value := range series.Values {
+				tagKey := value[0].(string)
+				if excludeTags[tagKey] {
+					continue
+				}
+				tagKeys = append(tagKeys, tagKey)
+			}
+		}
+	}
+
+	for _, tagCamel := range tagKeys {
+		tag := utils.ToSnakeCase(tagCamel)
+		continuousQuery := fmt.Sprintf(InfluxDBContinuousQueryFmt, tag)
+		measurement := fmt.Sprintf(InfluxDBMeasurementFmt, tag)
+		queryStrings[continuousQuery] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT count(%v) as total INTO %v FROM %v GROUP BY time(%v),%v END",
+			continuousQuery, dbName, utils.ToSnakeCase(ValueFieldKey), measurement, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod, tag)
+	}
 
 	for queryName, queryString := range queryStrings {
 		query := influxcli.NewQuery(queryString, "", "")
