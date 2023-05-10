@@ -18,11 +18,18 @@ secret:
 configMap:
   responseConfig: |-
     {
-       "Versions": [{
-          "Name": "v1.0.0",
-          "ReleaseDate": "2020-05-18T12:30:00Z",
-          "Tags": ["latest"]
-       }]
+      "versions": [{
+        "name": "v1.0.0",
+        "releaseDate": "2020-05-18T12:30:00Z",
+        "tags": ["latest"]
+      }]
+    }
+  requestSchema: |-
+    {
+      "appVersionSchema": {
+        "dataType": "string",
+        "maxLen": 200
+      }
     }
 
 replicaCount: 3

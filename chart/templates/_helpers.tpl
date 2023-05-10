@@ -32,12 +32,13 @@ Create chart name and version as used by the chart label.
 {{- end -}}
 
 {{/*
-Create configMap name used to store the information about latest version of the application.
+Create configMap name used to store the information for the upgrade responder server.
 */}}
-{{- define "upgradeResponder.configMapName" -}}
+{{- define "upgradeResponder.upgradeResponderConfigMapName" -}}
 {{- $fullName := include "upgradeResponder.fullname" . -}}
-{{- printf "%s-%s" "configmap" $fullName  | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-%s" "upgrade-responder-configmap" $fullName  | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+
 
 
 

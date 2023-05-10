@@ -46,6 +46,11 @@ var (
 	HTTPHeaderXForwardedFor = "X-Forwarded-For"
 	ValueFieldKey           = "value" // A dummy InfluxDB field used to count the number of points
 	ValueFieldValue         = 1
+
+	extraInfoTypeTag   = "tag"
+	extraInfoTypeField = "field"
+
+	defaultMaxStringValueLength = 200
 )
 
 type Server struct {
@@ -55,6 +60,7 @@ type Server struct {
 	influxClient   influxcli.Client
 	db             *maxminddb.Reader
 	dbCache        *DBCache
+	RequestSchema  RequestSchema
 }
 
 type Location struct {
@@ -66,20 +72,87 @@ type Location struct {
 }
 
 type ResponseConfig struct {
-	Versions []Version
+	Versions []Version `json:"versions"`
 }
 
 type Version struct {
-	Name                 string // must be in semantic versioning
-	ReleaseDate          string
-	MinUpgradableVersion string // can be empty or semantic versioning
-	Tags                 []string
-	ExtraInfo            map[string]string
+	Name                 string            `json:"name"` // must be in semantic versioning
+	ReleaseDate          string            `json:"releaseDate"`
+	MinUpgradableVersion string            `json:"minUpgradableVersion"` // can be empty or semantic versioning
+	Tags                 []string          `json:"tags"`
+	ExtraInfo            map[string]string `json:"extraInfo"`
+}
+
+type RequestSchema struct {
+	AppVersionSchema     Schema            `json:"appVersionSchema"`
+	ExtraTagInfoSchema   map[string]Schema `json:"extraTagInfoSchema"`
+	ExtraFieldInfoSchema map[string]Schema `json:"extraFieldInfoSchema"`
+}
+
+type Schema struct {
+	DataType string `json:"dataType"`
+	MaxLen   int    `json:"maxLen"`
+}
+
+func (sc *Schema) Validate(value interface{}) (isValid bool) {
+	defer func() {
+		if !isValid {
+			logrus.Debugf("validate failed: schema %+v, value %v", sc, value)
+		}
+	}()
+
+	switch sc.DataType {
+	case "string":
+		v, ok := value.(string)
+		if !ok {
+			return false
+		}
+		maxLen := defaultMaxStringValueLength
+		if sc.MaxLen > 0 {
+			maxLen = sc.MaxLen
+		}
+		return len(v) <= maxLen
+	case "float":
+		if _, ok := value.(float64); !ok {
+			return false
+		}
+		return true
+	case "boolean":
+		if _, ok := value.(bool); !ok {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func (s *Server) ValidateExtraInfo(key string, value interface{}, extraInfoType string) bool {
+	switch extraInfoType {
+	case extraInfoTypeTag:
+		schema, ok := s.RequestSchema.ExtraTagInfoSchema[key]
+		if !ok {
+			return false
+		}
+		return schema.Validate(value)
+	case extraInfoTypeField:
+		schema, ok := s.RequestSchema.ExtraFieldInfoSchema[key]
+		if !ok {
+			return false
+		}
+		return schema.Validate(value)
+	default:
+		return false
+	}
 }
 
 type CheckUpgradeRequest struct {
-	AppVersion string            `json:"appVersion"`
-	ExtraInfo  map[string]string `json:"extraInfo"`
+	AppVersion string `json:"appVersion"`
+
+	ExtraTagInfo   map[string]string      `json:"extraTagInfo"`
+	ExtraFieldInfo map[string]interface{} `json:"extraFieldInfo"`
+
+	// Deprecated: replaced by ExtraTagInfo
+	ExtraInfo map[string]string `json:"extraInfo"`
 }
 
 type CheckUpgradeResponse struct {
@@ -87,27 +160,41 @@ type CheckUpgradeResponse struct {
 	RequestIntervalInMinutes int       `json:"requestIntervalInMinutes"`
 }
 
-func NewServer(done chan struct{}, applicationName, configFile, influxURL, influxUser, influxPass, queryPeriod, geodb string, cacheSyncInterval, cacheSize int) (*Server, error) {
+func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requestSchemaFilePath, influxURL, influxUser, influxPass, queryPeriod, geodb string, cacheSyncInterval, cacheSize int) (*Server, error) {
 	InfluxDBDatabase = applicationName + "_" + InfluxDBDatabase
 	InfluxDBContinuousQueryPeriod = queryPeriod
 
-	path := filepath.Clean(configFile)
-	f, err := os.Open(path)
+	responseConfigFile, err := os.Open(filepath.Clean(responseConfigFilePath))
 	if err != nil {
-		return nil, errors.Wrap(err, "fail to open configFile")
+		return nil, errors.Wrapf(err, "fail to open responseConfigFile at %v", responseConfigFilePath)
 	}
-	defer f.Close()
+	defer responseConfigFile.Close()
 
 	var config ResponseConfig
-	if err := json.NewDecoder(f).Decode(&config); err != nil {
+	if err := json.NewDecoder(responseConfigFile).Decode(&config); err != nil {
 		return nil, err
 	}
+
+	requestSchemaFile, err := os.Open(filepath.Clean(requestSchemaFilePath))
+	if err != nil {
+		return nil, errors.Wrapf(err, "fail to open requestSchemaFile at %v", requestSchemaFilePath)
+	}
+	defer requestSchemaFile.Close()
+
+	var requestSchema RequestSchema
+	if err := json.NewDecoder(requestSchemaFile).Decode(&requestSchema); err != nil {
+		return nil, err
+	}
+
 	s := &Server{
 		done:           done,
 		VersionMap:     map[string]*Version{},
 		TagVersionsMap: map[string][]*Version{},
 	}
 	if err := s.validateAndLoadResponseConfig(&config); err != nil {
+		return nil, err
+	}
+	if err := s.validateAndLoadRequestSchema(requestSchema); err != nil {
 		return nil, err
 	}
 
@@ -243,6 +330,41 @@ func (s *Server) validateAndLoadResponseConfig(config *ResponseConfig) error {
 	if len(s.TagVersionsMap[VersionTagLatest]) == 0 {
 		return fmt.Errorf("no latest label specified")
 	}
+	return nil
+}
+
+func (s *Server) validateAndLoadRequestSchema(requestSchema RequestSchema) error {
+	if requestSchema.AppVersionSchema.DataType != "string" {
+		return fmt.Errorf("AppVersionSchema must have string data type: %v", requestSchema.AppVersionSchema.DataType)
+	}
+	if requestSchema.AppVersionSchema.MaxLen < 0 {
+		return fmt.Errorf("AppVersionSchema must have MaxLen >= 0")
+	}
+
+	for schemaName, schema := range requestSchema.ExtraFieldInfoSchema {
+		switch schema.DataType {
+		case "string":
+			if schema.MaxLen < 0 {
+				return fmt.Errorf("schema %v with data type string must have Maxlen >= 0", schemaName)
+			}
+		case "float", "boolean":
+		default:
+			return fmt.Errorf("field schema %v has invalid data type %v", schemaName, schema.DataType)
+		}
+	}
+
+	for schemaName, schema := range requestSchema.ExtraTagInfoSchema {
+		switch schema.DataType {
+		case "string":
+			if schema.MaxLen < 0 {
+				return fmt.Errorf("schema %v of data type string must have Maxlen >= 0", schemaName)
+			}
+		default:
+			return fmt.Errorf("tag schema %v must have string data type %v", schemaName, schema.DataType)
+		}
+	}
+
+	s.RequestSchema = requestSchema
 	return nil
 }
 
@@ -382,41 +504,65 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 	}
 
 	// We use IP to find the location but we don't store IP
-	loc, err := s.getLocation(publicIP)
+	location, err := s.getLocation(publicIP)
 	if err != nil {
 		logrus.Error("Failed to get location for one ip")
 	}
 
 	if s.influxClient != nil {
-		var (
-			err error
-			pt  *influxcli.Point
-		)
+		var err error
 		defer func() {
 			if err != nil {
 				logrus.Errorf("Failed to recordRequest: %v", err)
 			}
 		}()
 
-		tags := map[string]string{
-			InfluxDBTagAppVersion: req.AppVersion,
-		}
-		for k, v := range req.ExtraInfo {
-			tags[utils.ToSnakeCase(k)] = v
-		}
-		fields := map[string]interface{}{
-			utils.ToSnakeCase(ValueFieldKey): ValueFieldValue,
-		}
-		if loc != nil {
-			tags[InfluxDBTagLocationCity] = loc.City
-			tags[InfluxDBTagLocationCountry] = loc.Country.Name
-			tags[InfluxDBTagLocationCountryISOCode] = loc.Country.ISOCode
-		}
-		pt, err = influxcli.NewPoint(InfluxDBMeasurement, tags, fields, time.Now())
-		if err != nil {
+		if !s.RequestSchema.AppVersionSchema.Validate(req.AppVersion) {
+			err = errors.Errorf("AppVersion %v is not valid according to schema %+v", req.AppVersion, s.RequestSchema.AppVersionSchema)
 			return
 		}
 
+		tags := s.getTagsFromRequest(req, location)
+		fields := s.getFieldsFromRequest(req)
+
+		pt, err := influxcli.NewPoint(InfluxDBMeasurement, tags, fields, time.Now())
+		if err != nil {
+			return
+		}
 		s.dbCache.AddPoint(pt)
 	}
+}
+
+func (s *Server) getTagsFromRequest(req *CheckUpgradeRequest, location *Location) map[string]string {
+	tags := map[string]string{
+		InfluxDBTagAppVersion: req.AppVersion,
+	}
+	extraTagInfo := utils.MergeStringMaps(req.ExtraInfo, req.ExtraTagInfo)
+	for k, v := range extraTagInfo {
+		if s.ValidateExtraInfo(k, v, extraInfoTypeTag) {
+			tags[utils.ToSnakeCase(k)] = v
+		}
+	}
+
+	if location != nil {
+		tags[InfluxDBTagLocationCity] = location.City
+		tags[InfluxDBTagLocationCountry] = location.Country.Name
+		tags[InfluxDBTagLocationCountryISOCode] = location.Country.ISOCode
+	}
+
+	return tags
+}
+
+func (s *Server) getFieldsFromRequest(req *CheckUpgradeRequest) map[string]interface{} {
+	fields := map[string]interface{}{
+		utils.ToSnakeCase(ValueFieldKey): ValueFieldValue,
+	}
+	fields[utils.ToSnakeCase(ValueFieldKey)] = ValueFieldValue
+	for k, v := range req.ExtraFieldInfo {
+		if s.ValidateExtraInfo(k, v, extraInfoTypeField) {
+			fields[utils.ToSnakeCase(k)] = v
+		}
+	}
+
+	return fields
 }
