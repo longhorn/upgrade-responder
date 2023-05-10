@@ -23,3 +23,15 @@ func IsAlreadyExistsError(err error) bool {
 	}
 	return strings.Contains(err.Error(), "already exist")
 }
+
+// MergeStringMaps merges multiple string maps into a single map.
+// If there are duplicate keys, the value overwrites by the latter map.
+func MergeStringMaps(maps ...map[string]string) map[string]string {
+	result := map[string]string{}
+	for _, m := range maps {
+		for key, value := range m {
+			result[key] = value
+		}
+	}
+	return result
+}

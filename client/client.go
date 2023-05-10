@@ -23,14 +23,21 @@ type UpgradeRequester interface {
 }
 
 type Version struct {
-	Name        string // must be in semantic versioning
-	ReleaseDate string
-	Tags        []string
+	Name                 string            `json:"name"` // must be in semantic versioning
+	ReleaseDate          string            `json:"releaseDate"`
+	MinUpgradableVersion string            `json:"minUpgradableVersion"`
+	Tags                 []string          `json:"tags"`
+	ExtraInfo            map[string]string `json:"extraInfo"`
 }
 
 type CheckUpgradeRequest struct {
-	AppVersion string            `json:"appVersion"`
-	ExtraInfo  map[string]string `json:"extraInfo"`
+	AppVersion string `json:"appVersion"`
+
+	ExtraTagInfo   map[string]string      `json:"extraTagInfo"`
+	ExtraFieldInfo map[string]interface{} `json:"extraFieldInfo"`
+
+	// Deprecated: replaced by ExtraTagInfo
+	ExtraInfo map[string]string `json:"extraInfo"`
 }
 
 type CheckUpgradeResponse struct {

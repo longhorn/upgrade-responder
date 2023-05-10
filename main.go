@@ -20,6 +20,8 @@ var VERSION = "v0.0.0-dev"
 const (
 	FlagUpgradeResponseConfiguration = "upgrade-response-config"
 	EnvUpgradeResponseConfiguration  = "UPGRADE_RESPONSE_CONFIG"
+	FlagRequestSchema                = "request-schema"
+	EnvRequestSchema                 = "REQUEST_SCHEMA"
 	FlagApplicationName              = "application-name"
 	EnvApplicationName               = "APPLICATION_NAME"
 	FlagInfluxDBURL                  = "influxdb-url"
@@ -75,6 +77,11 @@ func UpgradeResponderCmd() cli.Command {
 				Name:   FlagUpgradeResponseConfiguration,
 				EnvVar: EnvUpgradeResponseConfiguration,
 				Usage:  "Specify the response configuration file for upgrade query",
+			},
+			cli.StringFlag{
+				Name:   FlagRequestSchema,
+				EnvVar: EnvRequestSchema,
+				Usage:  "Specify the request schema file which contains the rules that the upgrade responder server use to validate request data before writing to database",
 			},
 			cli.StringFlag{
 				Name:   FlagApplicationName,
@@ -137,7 +144,8 @@ func startUpgradeResponder(c *cli.Context) error {
 		return err
 	}
 
-	cfg := c.String(FlagUpgradeResponseConfiguration)
+	responseConfigFile := c.String(FlagUpgradeResponseConfiguration)
+	requestSchemaFile := c.String(FlagRequestSchema)
 	influxURL := c.String(FlagInfluxDBURL)
 	influxUser := c.String(FlagInfluxDBUser)
 	influxPass := c.String(FlagInfluxDBPass)
@@ -149,7 +157,7 @@ func startUpgradeResponder(c *cli.Context) error {
 	cacheSize := c.Int(FlagCacheSize)
 
 	done := make(chan struct{})
-	server, err := upgraderesponder.NewServer(done, applicationName, cfg, influxURL, influxUser, influxPass, queryPeriod, geodb, cacheSyncInterval, cacheSize)
+	server, err := upgraderesponder.NewServer(done, applicationName, responseConfigFile, requestSchemaFile, influxURL, influxUser, influxPass, queryPeriod, geodb, cacheSyncInterval, cacheSize)
 	if err != nil {
 		return err
 	}
@@ -182,9 +190,14 @@ func RegisterShutdownChannel(done chan struct{}) {
 }
 
 func validateCommandLineArguments(c *cli.Context) error {
-	cfg := c.String(FlagUpgradeResponseConfiguration)
-	if cfg == "" {
+	responseConfigFile := c.String(FlagUpgradeResponseConfiguration)
+	if responseConfigFile == "" {
 		return fmt.Errorf("no upgrade response configuration file specified")
+	}
+
+	requestSchemaFile := c.String(FlagRequestSchema)
+	if requestSchemaFile == "" {
+		return fmt.Errorf("no request schema file specified")
 	}
 
 	applicationName := c.String(FlagApplicationName)
