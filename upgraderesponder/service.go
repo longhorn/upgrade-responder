@@ -22,8 +22,9 @@ const (
 	VersionTagLatest  = "latest"
 	AppMinimalVersion = "v0.0.1"
 
-	InfluxDBContinuousQueryFmt = "cq_by_%s_down_sampling"
-	InfluxDBMeasurementFmt     = "by_%s_down_sampling"
+	InfluxDBContinuousQueryFmt  = "cq_by_%s_down_sampling"
+	InfluxDBMeasurementCountFmt = "by_%s_count_down_sampling"
+	InfluxDBMeasurementMeanFmt  = "by_%s_mean_down_sampling"
 
 	InfluxDBMeasurement              = "upgrade_request"
 	InfluxDBMeasurementDownSampling  = "upgrade_request_down_sampling"
@@ -81,8 +82,13 @@ type Version struct {
 }
 
 type CheckUpgradeRequest struct {
-	AppVersion string            `json:"appVersion"`
-	ExtraInfo  map[string]string `json:"extraInfo"`
+	AppVersion string `json:"appVersion"`
+
+	ExtraTagInfo   map[string]string      `json:"extraTagInfo"`
+	ExtraFieldInfo map[string]interface{} `json:"extraFieldInfo"`
+
+	// Deprecated: replaced by ExtraTagInfo
+	ExtraInfo map[string]string `json:"extraInfo"`
 }
 
 type CheckUpgradeResponse struct {
@@ -202,37 +208,8 @@ func (s *Server) createContinuousQueries(dbName string) error {
 	queryStrings[InfluxDBContinuousQueryByCountryCode] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT count(%v) as total INTO %v FROM %v GROUP BY time(%v),%v END",
 		InfluxDBContinuousQueryByCountryCode, dbName, utils.ToSnakeCase(ValueFieldKey), InfluxDBMeasurementByCountryCode, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod, InfluxDBTagLocationCountryISOCode)
 
-	showTagKeys := influxcli.NewQuery(fmt.Sprintf("SHOW TAG KEYS FROM %s", InfluxDBMeasurement), dbName, "")
-	showTagKeysResp, err := s.influxClient.Query(showTagKeys)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get all tag keys from %s", InfluxDBMeasurement)
-	}
-
-	excludeTags := map[string]bool{
-		InfluxDBTagAppVersion:             true,
-		InfluxDBTagLocationCountryISOCode: true,
-	}
-	// Parse the result and store the tag keys in a slice
-	var tagKeys []string
-	for _, result := range showTagKeysResp.Results {
-		for _, series := range result.Series {
-			for _, value := range series.Values {
-				tagKey := value[0].(string)
-				if excludeTags[tagKey] {
-					continue
-				}
-				tagKeys = append(tagKeys, tagKey)
-			}
-		}
-	}
-
-	for _, tagCamel := range tagKeys {
-		tag := utils.ToSnakeCase(tagCamel)
-		continuousQuery := fmt.Sprintf(InfluxDBContinuousQueryFmt, tag)
-		measurement := fmt.Sprintf(InfluxDBMeasurementFmt, tag)
-		queryStrings[continuousQuery] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT count(%v) as total INTO %v FROM %v GROUP BY time(%v),%v END",
-			continuousQuery, dbName, utils.ToSnakeCase(ValueFieldKey), measurement, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod, tag)
-	}
+	s.addContinuousQuerieStringsFromTags(dbName, queryStrings)
+	s.addContinuousQuerieStringsFromFields(dbName, queryStrings)
 
 	for queryName, queryString := range queryStrings {
 		query := influxcli.NewQuery(queryString, "", "")
@@ -249,6 +226,82 @@ func (s *Server) createContinuousQueries(dbName string) error {
 		logrus.Debugf("Created continuous query %v", queryName)
 	}
 	return nil
+}
+
+func (s *Server) addContinuousQuerieStringsFromFields(databaseName string, queryStrings map[string]string) error {
+	influxQuery := influxcli.NewQuery(fmt.Sprintf("SHOW FIELD KEYS FROM %s", InfluxDBMeasurement), databaseName, "")
+	influxResp, err := s.influxClient.Query(influxQuery)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get all field keys from %s", InfluxDBMeasurement)
+	}
+
+	keyDataTypeMap := s.getKeyDataTypeMapFromQueryResponse(*influxResp, nil)
+	for keyCamel, dataType := range keyDataTypeMap {
+		key := utils.ToSnakeCase(keyCamel)
+		continuousQuery := fmt.Sprintf(InfluxDBContinuousQueryFmt, key)
+
+		var measurement string
+		switch dataType {
+		case "float":
+			measurement = fmt.Sprintf(InfluxDBMeasurementMeanFmt, key)
+			queryStrings[continuousQuery] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT MEAN(%v) AS total INTO %v FROM %v GROUP BY time(%v) END",
+				continuousQuery, databaseName, key, measurement, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod)
+		case "boolean":
+			measurement = fmt.Sprintf(InfluxDBMeasurementCountFmt, key)
+			queryStrings[continuousQuery] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT COUNT(%v) AS total INTO %v FROM %v WHERE %v = true GROUP BY time(%v) END",
+				continuousQuery, databaseName, key, measurement, InfluxDBMeasurement, key, InfluxDBContinuousQueryPeriod)
+		default:
+			measurement = fmt.Sprintf(InfluxDBMeasurementCountFmt, key)
+			queryStrings[continuousQuery] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT COUNT(%v) AS total INTO %v FROM %v GROUP BY time(%v) END",
+				continuousQuery, databaseName, key, measurement, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod)
+		}
+	}
+	return nil
+}
+
+func (s *Server) addContinuousQuerieStringsFromTags(databaseName string, queryStrings map[string]string) error {
+	influxQuery := influxcli.NewQuery(fmt.Sprintf("SHOW TAG KEYS FROM %s", InfluxDBMeasurement), databaseName, "")
+	influxResp, err := s.influxClient.Query(influxQuery)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get all tag keys from %s", InfluxDBMeasurement)
+	}
+
+	excludeTags := map[string]bool{
+		InfluxDBTagAppVersion:             true,
+		InfluxDBTagLocationCountryISOCode: true,
+	}
+	tagKeys := s.getKeyDataTypeMapFromQueryResponse(*influxResp, excludeTags)
+	for tagCamel := range tagKeys {
+		tag := utils.ToSnakeCase(tagCamel)
+		continuousQuery := fmt.Sprintf(InfluxDBContinuousQueryFmt, tag)
+		measurement := fmt.Sprintf(InfluxDBMeasurementCountFmt, tag)
+		queryStrings[continuousQuery] = fmt.Sprintf("CREATE CONTINUOUS QUERY %v ON %v BEGIN SELECT count(%v) as total INTO %v FROM %v GROUP BY time(%v),%v END",
+			continuousQuery, databaseName, utils.ToSnakeCase(ValueFieldKey), measurement, InfluxDBMeasurement, InfluxDBContinuousQueryPeriod, tag)
+	}
+	return nil
+}
+
+func (s *Server) getKeyDataTypeMapFromQueryResponse(influxResp influxcli.Response, excludeKeys map[string]bool) (keys map[string]string) {
+	keys = map[string]string{}
+	for _, result := range influxResp.Results {
+		for _, series := range result.Series {
+			for _, value := range series.Values {
+				key := value[0].(string)
+				if excludeKeys[key] {
+					continue
+				}
+
+				dataType := "unsigned"
+				switch len(value) {
+				case 1:
+				default:
+					dataType = value[1].(string)
+				}
+				keys[key] = dataType
+			}
+		}
+	}
+	return keys
 }
 
 func (s *Server) validateAndLoadResponseConfig(config *ResponseConfig) error {
@@ -417,41 +470,63 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 	}
 
 	// We use IP to find the location but we don't store IP
-	loc, err := s.getLocation(publicIP)
+	location, err := s.getLocation(publicIP)
 	if err != nil {
 		logrus.Error("Failed to get location for one ip")
 	}
 
 	if s.influxClient != nil {
-		var (
-			err error
-			pt  *influxcli.Point
-		)
+		var err error
 		defer func() {
 			if err != nil {
 				logrus.Errorf("Failed to recordRequest: %v", err)
 			}
 		}()
 
-		tags := map[string]string{
-			InfluxDBTagAppVersion: req.AppVersion,
-		}
-		for k, v := range req.ExtraInfo {
-			tags[utils.ToSnakeCase(k)] = v
-		}
-		fields := map[string]interface{}{
-			utils.ToSnakeCase(ValueFieldKey): ValueFieldValue,
-		}
-		if loc != nil {
-			tags[InfluxDBTagLocationCity] = loc.City
-			tags[InfluxDBTagLocationCountry] = loc.Country.Name
-			tags[InfluxDBTagLocationCountryISOCode] = loc.Country.ISOCode
-		}
-		pt, err = influxcli.NewPoint(InfluxDBMeasurement, tags, fields, time.Now())
-		if err != nil {
-			return
-		}
-
-		s.dbCache.AddPoint(pt)
+		s.recordTagsFromRequest(req, location)
+		s.recordFieldsFromRequest(req)
 	}
+}
+
+func (s *Server) recordTagsFromRequest(req *CheckUpgradeRequest, location *Location) {
+	tags := map[string]string{
+		InfluxDBTagAppVersion: req.AppVersion,
+	}
+	extraTagInfo := utils.MergeStringMaps(req.ExtraInfo, req.ExtraTagInfo)
+	for k, v := range extraTagInfo {
+		tags[utils.ToSnakeCase(k)] = v
+	}
+
+	if location != nil {
+		tags[InfluxDBTagLocationCity] = location.City
+		tags[InfluxDBTagLocationCountry] = location.Country.Name
+		tags[InfluxDBTagLocationCountryISOCode] = location.Country.ISOCode
+	}
+
+	fields := map[string]interface{}{
+		utils.ToSnakeCase(ValueFieldKey): ValueFieldValue,
+	}
+
+	pt, err := influxcli.NewPoint(InfluxDBMeasurement, tags, fields, time.Now())
+	if err != nil {
+		logrus.WithError(err).Error("Failed to record tags from request")
+		return
+	}
+
+	s.dbCache.AddPoint(pt)
+}
+
+func (s *Server) recordFieldsFromRequest(req *CheckUpgradeRequest) {
+	fields := make(map[string]interface{}, len(req.ExtraFieldInfo))
+	for k, v := range req.ExtraFieldInfo {
+		fields[utils.ToSnakeCase(k)] = v
+	}
+
+	pt, err := influxcli.NewPoint(InfluxDBMeasurement, nil, fields, time.Now())
+	if err != nil {
+		logrus.WithError(err).Error("Failed to record fields from request")
+		return
+	}
+
+	s.dbCache.AddPoint(pt)
 }
