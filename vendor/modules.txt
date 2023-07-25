@@ -5,6 +5,7 @@ github.com/Masterminds/semver
 ## explicit
 github.com/Sirupsen/logrus
 # github.com/davecgh/go-spew v1.1.1
+## explicit
 github.com/davecgh/go-spew/spew
 # github.com/gorilla/mux v1.8.0
 ## explicit; go 1.12
@@ -21,9 +22,10 @@ github.com/oschwald/maxminddb-golang
 ## explicit
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
+## explicit
 github.com/pmezard/go-difflib/difflib
 # github.com/stretchr/testify v1.7.0
-## explicit
+## explicit; go 1.13
 github.com/stretchr/testify/assert
 # github.com/urfave/cli v1.18.0
 ## explicit
@@ -33,4 +35,5 @@ github.com/urfave/cli
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+## explicit
 gopkg.in/yaml.v3
