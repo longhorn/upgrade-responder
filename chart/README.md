@@ -27,11 +27,18 @@
     configMap:
       responseConfig: |-
         {
-           "Versions": [{
-              "Name": "v1.1.1",
-              "ReleaseDate": "2020-05-18T12:30:00Z",
-              "Tags": ["latest"]
+           "versions": [{
+              "name": "v1.1.1",
+              "releaseDate": "2020-05-18T12:30:00Z",
+              "tags": ["latest"]
            }]
+        }
+      requestSchema: |-
+        {
+          "appVersionSchema": {
+            "dataType": "string",
+            "maxLen": 200
+          }
         }
     ```
 2. Running
