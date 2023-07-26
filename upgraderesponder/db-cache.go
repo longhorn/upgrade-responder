@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const maxSyncRetries = 5
+const maxSyncRetries = 2
 
 type DBCache struct {
 	sync.RWMutex

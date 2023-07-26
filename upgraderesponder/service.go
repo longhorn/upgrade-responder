@@ -30,6 +30,8 @@ const (
 	InfluxDBContinuousQueryDownSampling  = "cq_upgrade_request_down_sampling"
 	InfluxDBContinuousQueryByAppVersion  = "cq_by_app_version_down_sampling"
 	InfluxDBContinuousQueryByCountryCode = "cq_by_country_code_down_sampling"
+
+	influxClientTimeOut = 10 * time.Second
 )
 
 var (
@@ -225,6 +227,7 @@ func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requ
 		cfg := influxcli.HTTPConfig{
 			Addr:               influxURL,
 			InsecureSkipVerify: true,
+			Timeout:            influxClientTimeOut,
 		}
 		if influxUser != "" {
 			cfg.Username = influxUser
