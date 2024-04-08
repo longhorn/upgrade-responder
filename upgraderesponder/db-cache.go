@@ -62,6 +62,11 @@ func (c *DBCache) Sync() {
 	c.Lock()
 	defer c.Unlock()
 
+	if len(c.BatchPoints.Points()) == 0 {
+		logrus.Debug("Skipping syncing to database because there is no data in cache yet")
+		return
+	}
+
 	for i := 0; i < maxSyncRetries; i++ {
 		err := c.InfluxClient.Write(c.BatchPoints)
 		if err == nil {
@@ -87,12 +92,18 @@ func (c *DBCache) Sync() {
 }
 
 func (c *DBCache) AddPoint(p *influxcli.Point) {
-	c.Lock()
-	defer c.Unlock()
+	needToSync := false
 
+	c.Lock()
 	c.BatchPoints.AddPoint(p)
 	if len(c.BatchPoints.Points()) >= c.CacheSize {
+		needToSync = true
+	}
+	c.Unlock()
+
+	if needToSync {
 		c.syncChan <- struct{}{}
 	}
+
 	return
 }

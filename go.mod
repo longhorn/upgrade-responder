@@ -1,6 +1,6 @@
 module github.com/longhorn/upgrade-responder
 
-go 1.17
+go 1.22
 
 require (
 	github.com/Masterminds/semver v1.5.0
