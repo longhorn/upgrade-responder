@@ -88,7 +88,6 @@ func (c *DBCache) Sync() {
 		panic(fmt.Sprintf("Failed to create new batch points after sync: %v. Crashing the program. Please check the hard-coded parameters", err))
 	}
 	c.BatchPoints = bp
-	return
 }
 
 func (c *DBCache) AddPoint(p *influxcli.Point) {
@@ -104,6 +103,4 @@ func (c *DBCache) AddPoint(p *influxcli.Point) {
 	if needToSync {
 		c.syncChan <- struct{}{}
 	}
-
-	return
 }

@@ -404,7 +404,6 @@ func (s *Server) CheckUpgrade(rw http.ResponseWriter, req *http.Request) {
 		logrus.Errorf("Failed to repsondWithJSON: %v", err)
 		return
 	}
-	return
 }
 
 func respondWithJSON(rw http.ResponseWriter, obj interface{}) error {
