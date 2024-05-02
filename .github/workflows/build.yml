@@ -54,6 +54,10 @@ jobs:
       run: |
         cp -r ./bin/* ./package/
 
+    - name: Copy geodb to package
+      run: |
+        cp ./geodb/GeoLite2-City.mmdb ./package/
+
     # For multi-platform support
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
