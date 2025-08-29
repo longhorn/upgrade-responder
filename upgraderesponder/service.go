@@ -559,7 +559,6 @@ func (s *Server) getFieldsFromRequest(req *CheckUpgradeRequest) map[string]inter
 	fields := map[string]interface{}{
 		utils.ToSnakeCase(ValueFieldKey): ValueFieldValue,
 	}
-	fields[utils.ToSnakeCase(ValueFieldKey)] = ValueFieldValue
 	for k, v := range req.ExtraFieldInfo {
 		if s.ValidateExtraInfo(k, v, extraInfoTypeField) {
 			fields[utils.ToSnakeCase(k)] = v
