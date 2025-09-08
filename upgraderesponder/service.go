@@ -63,6 +63,7 @@ type Server struct {
 	db             *maxminddb.Reader
 	dbCache        *DBCache
 	RequestSchema  RequestSchema
+	scarfService   *ScarfService
 }
 
 type Location struct {
@@ -178,7 +179,7 @@ type CheckUpgradeResponse struct {
 	RequestIntervalInMinutes int       `json:"requestIntervalInMinutes"`
 }
 
-func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requestSchemaFilePath, influxURL, influxUser, influxPass, queryPeriod, geodb string, cacheSyncInterval, cacheSize int) (*Server, error) {
+func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requestSchemaFilePath, influxURL, influxUser, influxPass, queryPeriod, geodb string, cacheSyncInterval, cacheSize int, scarfEndpoint string, scarfTimeout int) (*Server, error) {
 	InfluxDBDatabase = applicationName + "_" + InfluxDBDatabase
 	InfluxDBContinuousQueryPeriod = queryPeriod
 
@@ -208,6 +209,7 @@ func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requ
 		done:           done,
 		VersionMap:     map[string]*Version{},
 		TagVersionsMap: map[string][]*Version{},
+		scarfService:   NewScarfService(scarfEndpoint, scarfTimeout),
 	}
 	if err := s.validateAndLoadResponseConfig(&config); err != nil {
 		return nil, err
@@ -514,13 +516,13 @@ func (s *Server) getLocation(addr string) (*Location, error) {
 
 // Don't need to return error to the requester
 func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) {
-	//xForwaredFor := httpReq.Header[HTTPHeaderXForwardedFor]
-	//publicIP := ""
-	//l := len(xForwaredFor)
-	//if l > 0 {
-	//	// rightmost IP must be the public IP
-	//	publicIP = xForwaredFor[l-1]
-	//}
+	xForwaredFor := httpReq.Header[HTTPHeaderXForwardedFor]
+	publicIP := ""
+	l := len(xForwaredFor)
+	if l > 0 {
+		// rightmost IP must be the public IP
+		publicIP = xForwaredFor[l-1]
+	}
 
 	// We use IP to find the location but we don't store IP
 	//loc, err := s.getLocation(publicIP)
@@ -530,6 +532,15 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 	//logrus.Debugf("HTTP request: Location %+v, req %v", loc, req)
 	var location *Location = nil
 
+	// Validate the request before sending events
+	if !s.RequestSchema.AppVersionSchema.Validate(req.AppVersion) {
+		logrus.Errorf("AppVersion %v is not valid according to schema %+v", req.AppVersion, s.RequestSchema.AppVersionSchema)
+		return
+	}
+
+	// Send Scarf.sh event asynchronously for all valid requests
+	s.scarfService.SendEvent(req.AppVersion, publicIP)
+
 	if s.influxClient != nil {
 		var err error
 		defer func() {
@@ -537,11 +548,6 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 				logrus.Errorf("Failed to recordRequest: %v", err)
 			}
 		}()
-
-		if !s.RequestSchema.AppVersionSchema.Validate(req.GetAppVersion()) {
-			err = errors.Errorf("AppVersion %v is not valid according to schema %+v", req.GetAppVersion(), s.RequestSchema.AppVersionSchema)
-			return
-		}
 
 		tags := s.getTagsFromRequest(req, location)
 		tags[InfluxDBTagAppVersion] = req.GetAppVersion()
