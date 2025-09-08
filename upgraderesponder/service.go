@@ -63,6 +63,7 @@ type Server struct {
 	db             *maxminddb.Reader
 	dbCache        *DBCache
 	RequestSchema  RequestSchema
+	scarfService   *ScarfService
 }
 
 type Location struct {
@@ -162,7 +163,7 @@ type CheckUpgradeResponse struct {
 	RequestIntervalInMinutes int       `json:"requestIntervalInMinutes"`
 }
 
-func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requestSchemaFilePath, influxURL, influxUser, influxPass, queryPeriod, geodb string, cacheSyncInterval, cacheSize int) (*Server, error) {
+func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requestSchemaFilePath, influxURL, influxUser, influxPass, queryPeriod, geodb string, cacheSyncInterval, cacheSize int, scarfEndpoint string, scarfTimeout int) (*Server, error) {
 	InfluxDBDatabase = applicationName + "_" + InfluxDBDatabase
 	InfluxDBContinuousQueryPeriod = queryPeriod
 
@@ -192,6 +193,7 @@ func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requ
 		done:           done,
 		VersionMap:     map[string]*Version{},
 		TagVersionsMap: map[string][]*Version{},
+		scarfService:   NewScarfService(scarfEndpoint, scarfTimeout),
 	}
 	if err := s.validateAndLoadResponseConfig(&config); err != nil {
 		return nil, err
@@ -511,6 +513,15 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 		logrus.Error("Failed to get location for one ip")
 	}
 
+	// Validate the request before sending events
+	if !s.RequestSchema.AppVersionSchema.Validate(req.AppVersion) {
+		logrus.Errorf("AppVersion %v is not valid according to schema %+v", req.AppVersion, s.RequestSchema.AppVersionSchema)
+		return
+	}
+
+	// Send Scarf.sh event asynchronously for all valid requests
+	s.scarfService.SendEvent(req.AppVersion, publicIP)
+
 	if s.influxClient != nil {
 		var err error
 		defer func() {
@@ -518,11 +529,6 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 				logrus.Errorf("Failed to recordRequest: %v", err)
 			}
 		}()
-
-		if !s.RequestSchema.AppVersionSchema.Validate(req.AppVersion) {
-			err = errors.Errorf("AppVersion %v is not valid according to schema %+v", req.AppVersion, s.RequestSchema.AppVersionSchema)
-			return
-		}
 
 		tags := s.getTagsFromRequest(req, location)
 		fields := s.getFieldsFromRequest(req)
