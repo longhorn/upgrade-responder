@@ -49,6 +49,9 @@ service:
 flags:
   cacheSyncInterval: 1
   cacheSize: 100
+  # Scarf.sh telemetry configuration
+  scarfEndpoint: "" # Optional: URL template with {version} placeholder (e.g., https://yourcompany.gateway.scarf.sh/package/{version})
+  scarfTimeout: 30 # Timeout in seconds for Scarf.sh requests
 
 ingress:
   enabled: false
@@ -59,17 +62,17 @@ ingress:
   hosts:
     - example.com
   tls:
-   - secretName: example-com-tls
-     hosts:
-       - example.com
+    - secretName: example-com-tls
+      hosts:
+        - example.com
 
 resources:
   limits:
-   cpu: 200m
-   memory: 256Mi
+    cpu: 200m
+    memory: 256Mi
   requests:
-   cpu: 100m
-   memory: 128Mi
+    cpu: 100m
+    memory: 128Mi
 
 nodeSelector: {}
 
