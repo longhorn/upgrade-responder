@@ -49,6 +49,12 @@ spec:
             value: "{{ .Values.flags.cacheSyncInterval }}"
           - name: CACHE_SIZE
             value: "{{ .Values.flags.cacheSize }}"
+          {{- if .Values.flags.scarfEndpoint }}
+          - name: SCARF_ENDPOINT
+            value: "{{ .Values.flags.scarfEndpoint }}"
+          {{- end }}
+          - name: SCARF_TIMEOUT
+            value: "{{ .Values.flags.scarfTimeout }}"
           command:
           - upgrade-responder
           args:
@@ -72,6 +78,12 @@ spec:
           - $(CACHE_SYNC_INTERVAL)
           - --cache-size
           - $(CACHE_SIZE)
+          {{- if .Values.flags.scarfEndpoint }}
+          - --scarf-endpoint
+          - $(SCARF_ENDPOINT)
+          {{- end }}
+          - --scarf-timeout
+          - $(SCARF_TIMEOUT)
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
