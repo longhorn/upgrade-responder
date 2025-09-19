@@ -3,6 +3,7 @@ on:
   push:
     branches:
     - master
+    - longhorn
     - v*
     tags:
     - v*
