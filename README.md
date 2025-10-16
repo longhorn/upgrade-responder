@@ -1,4 +1,4 @@
-# Upgrade Responder[![Build Status](https://drone-publish.longhorn.io/api/badges/longhorn/upgrade-responder/status.svg)](https://drone-publish.longhorn.io/longhorn/upgrade-responder)
+# Upgrade Responder
 
 > Note: Because many existing Longhorn deployments are sending `longhornVersion` instead of `appVersion` in the request body and Longhorn currently disables location collecting,
 > this branch is serving as a temporary solution specifically for Longhorn project. Until these blockers are removed, Longhorn
