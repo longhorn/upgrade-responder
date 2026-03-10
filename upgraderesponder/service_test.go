@@ -1,6 +1,9 @@
 package upgraderesponder
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestValidate(t *testing.T) {
 	testCases := []struct {
@@ -188,5 +191,178 @@ func TestValidateExtraInfo(t *testing.T) {
 		if output := s.ValidateExtraInfo(testCase.key, testCase.value, testCase.extraInfoType); output != testCase.expected {
 			t.Errorf("Test case %v: %+v Output %v not equal to expected %v", i, testCase, output, testCase.expected)
 		}
+	}
+}
+
+func TestNewScarfService(t *testing.T) {
+	tests := []struct {
+		name                     string
+		endpointTemplates        []string
+		timeoutSeconds           int
+		expectedEnabled          bool
+		expectedEndpointTemplate map[string]struct{}
+		expectedTimeout          time.Duration
+		expectHTTPClient         bool
+	}{
+		{
+			name: "trim empty entries and deduplicate templates",
+			endpointTemplates: []string{
+				"",
+				"   ",
+				"https://scarf.sh/a",
+				" https://scarf.sh/a ",
+				"https://scarf.sh/b",
+				"\thttps://scarf.sh/b\t",
+			},
+			timeoutSeconds:  5,
+			expectedEnabled: true,
+			expectedEndpointTemplate: map[string]struct{}{
+				"https://scarf.sh/a": {},
+				"https://scarf.sh/b": {},
+			},
+			expectedTimeout:  5 * time.Second,
+			expectHTTPClient: true,
+		},
+		{
+			name: "disable service when no usable endpoint templates",
+			endpointTemplates: []string{
+				"",
+				" ",
+				"\n\t",
+			},
+			timeoutSeconds:           3,
+			expectedEnabled:          false,
+			expectedEndpointTemplate: nil,
+			expectedTimeout:          0,
+			expectHTTPClient:         false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := NewScarfService(tc.endpointTemplates, tc.timeoutSeconds)
+
+			if svc == nil {
+				t.Fatalf("expected service to be created, got nil")
+			}
+
+			if svc.enabled != tc.expectedEnabled {
+				t.Fatalf("expected enabled=%v, got %v", tc.expectedEnabled, svc.enabled)
+			}
+
+			if len(svc.endpointTemplates) != len(tc.expectedEndpointTemplate) {
+				t.Fatalf("expected %d endpoint templates, got %d",
+					len(tc.expectedEndpointTemplate), len(svc.endpointTemplates))
+			}
+
+			for k := range tc.expectedEndpointTemplate {
+				if _, ok := svc.endpointTemplates[k]; !ok {
+					t.Fatalf("expected endpoint template %q not found", k)
+				}
+			}
+
+			if svc.timeout != tc.expectedTimeout {
+				t.Fatalf("expected timeout %v, got %v", tc.expectedTimeout, svc.timeout)
+			}
+
+			if tc.expectHTTPClient {
+				if svc.httpClient == nil {
+					t.Fatalf("expected httpClient to be initialized")
+				}
+				if svc.httpClient.Timeout != tc.expectedTimeout {
+					t.Fatalf("expected httpClient timeout %v, got %v",
+						tc.expectedTimeout, svc.httpClient.Timeout)
+				}
+			} else {
+				if svc.httpClient != nil {
+					t.Fatalf("expected httpClient to be nil")
+				}
+			}
+		})
+	}
+}
+
+func TestSubstituteTemplateVars(t *testing.T) {
+	tests := []struct {
+		name     string
+		template string
+		vars     map[string]string
+		expected string
+	}{
+		{
+			name:     "single variable",
+			template: "https://example.com/{version}",
+			vars: map[string]string{
+				"version": "v1.0.0",
+			},
+			expected: "https://example.com/v1.0.0",
+		},
+		{
+			name:     "multiple variables",
+			template: "https://example.com/{version}/{longhornDistro}",
+			vars: map[string]string{
+				"version":        "v1.0.0",
+				"longhornDistro": "oss",
+			},
+			expected: "https://example.com/v1.0.0/oss",
+		},
+		{
+			name:     "unused variable",
+			template: "https://example.com/{version}",
+			vars: map[string]string{
+				"version":        "v1.0.0",
+				"longhornDistro": "oss",
+			},
+			expected: "https://example.com/v1.0.0",
+		},
+		{
+			name:     "no variables",
+			template: "https://example.com/static",
+			vars:     map[string]string{},
+			expected: "https://example.com/static",
+		},
+		{
+			name:     "unknown variable replaced with empty string",
+			template: "https://example.com/{version}/{unknown}",
+			vars: map[string]string{
+				"version": "v1.0.0",
+			},
+			expected: "https://example.com/v1.0.0/",
+		},
+		{
+			name:     "empty variable value",
+			template: "https://example.com/{version}/{longhornDistro}",
+			vars: map[string]string{
+				"version":        "v1.0.0",
+				"longhornDistro": "",
+			},
+			expected: "https://example.com/v1.0.0/",
+		},
+		{
+			name:     "same variable multiple times",
+			template: "https://example.com/{version}/download/{version}",
+			vars: map[string]string{
+				"version": "v1.0.0",
+			},
+			expected: "https://example.com/v1.0.0/download/v1.0.0",
+		},
+		{
+			name:     "adjacent variables",
+			template: "https://example.com/{version}{longhornDistro}",
+			vars: map[string]string{
+				"version":        "v1.0.0",
+				"longhornDistro": "oss",
+			},
+			expected: "https://example.com/v1.0.0oss",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := substituteTemplateVars(tt.template, tt.vars)
+			if result != tt.expected {
+				t.Fatalf("expected %s, got %s", tt.expected, result)
+			}
+		})
 	}
 }
