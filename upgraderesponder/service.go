@@ -171,7 +171,7 @@ func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requ
 	if err != nil {
 		return nil, errors.Wrapf(err, "fail to open responseConfigFile at %v", responseConfigFilePath)
 	}
-	defer responseConfigFile.Close()
+	defer func() { _ = responseConfigFile.Close() }()
 
 	var config ResponseConfig
 	if err := json.NewDecoder(responseConfigFile).Decode(&config); err != nil {
@@ -182,7 +182,7 @@ func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requ
 	if err != nil {
 		return nil, errors.Wrapf(err, "fail to open requestSchemaFile at %v", requestSchemaFilePath)
 	}
-	defer requestSchemaFile.Close()
+	defer func() { _ = requestSchemaFile.Close() }()
 
 	var requestSchema RequestSchema
 	if err := json.NewDecoder(requestSchemaFile).Decode(&requestSchema); err != nil {
