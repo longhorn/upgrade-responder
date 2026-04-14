@@ -6,26 +6,6 @@ source $(dirname $0)/version
 cd $(dirname $0)/..
 
 mkdir -p bin
-
-LINKFLAGS="-X main.VERSION=$VERSION
-           -extldflags -static -s"
-
-ARCHS=${ARCHS:-''}
-if [[ -z "${ARCHS}" ]]; then
-    case $(uname -m) in
-    aarch64 | arm64)
-        ARCHS=(arm64)
-        ;;
-    x86_64)
-        ARCHS=(amd64)
-        ;;
-    *)
-        echo "$(uname -a): unsupported architecture"
-        exit 1
-    esac
-else
-    IFS=' ' read -r -a ARCHS <<<"${ARCHS}"
-fi
-for arch in "${ARCHS[@]}"; do
-    CGO_ENABLED=0 GOARCH="${arch}" go build -o "bin/upgrade-responder-${arch}" -ldflags "${LINKFLAGS}"
-done
+[ "$(uname)" != "Darwin" ] && LINKFLAGS="-extldflags -static -s"
+CGO_ENABLED=0 GOARCH=amd64 go build -ldflags "-X main.VERSION=$VERSION $LINKFLAGS" -o bin/upgrade-responder-amd64
+CGO_ENABLED=0 GOARCH=arm64 go build -ldflags "-X main.VERSION=$VERSION $LINKFLAGS" -o bin/upgrade-responder-arm64
