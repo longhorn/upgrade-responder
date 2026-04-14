@@ -46,7 +46,7 @@ func (s *ScarfService) SendEvent(appVersion, clientIP string) {
 }
 
 func (s *ScarfService) sendEventSync(appVersion, clientIP string) error {
-	url := strings.ReplaceAll(s.endpointTemplate, "{version}", appVersion)
+	url := strings.Replace(s.endpointTemplate, "{version}", appVersion, -1)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -60,7 +60,7 @@ func (s *ScarfService) sendEventSync(appVersion, clientIP string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 
 	return nil
 }

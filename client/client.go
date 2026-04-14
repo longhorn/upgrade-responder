@@ -114,7 +114,7 @@ func (c *UpgradeChecker) CheckUpgrade(currentAppVersion string, extraInfo map[st
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = r.Body.Close() }()
+	defer r.Body.Close()
 	if r.StatusCode != http.StatusOK {
 		message := ""
 		messageBytes, err := io.ReadAll(r.Body)
