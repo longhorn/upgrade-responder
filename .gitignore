@@ -4,7 +4,6 @@
 *.dll
 *.so
 *.dylib
-.dapper
 
 # Test binary, build with `go test -c`
 *.test
@@ -13,6 +12,7 @@
 *.out
 bin/
 dist/
+validate.done
 package/GeoLite2-City.mmdb
 package/upgrade-responder-amd64
 package/upgrade-responder-arm64

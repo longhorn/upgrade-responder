@@ -12,10 +12,12 @@ if echo $TAG | grep -q dirty; then
     TAG=dev
 fi
 
+mkdir -p ../dist
+
 cp ../bin/upgrade-responder-* .
 cp ../geodb/GeoLite2-City.mmdb .
 
 IMAGE=${REPO}/upgrade-responder:${TAG}
-buildx build --load -t ${IMAGE} .
+docker buildx build --load -t ${IMAGE} .
 echo ${IMAGE} > ../dist/images
 echo Built ${IMAGE}

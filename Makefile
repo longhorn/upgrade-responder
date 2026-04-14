@@ -1,19 +1,25 @@
-TARGETS := $(shell ls scripts)
+.PHONY: build validate test package ci release
 
-.dapper:
-	@echo Downloading dapper
-	@curl -sL https://releases.rancher.com/dapper/latest/dapper-`uname -s`-`uname -m` > .dapper.tmp
-	@@chmod +x .dapper.tmp
-	@./.dapper.tmp -v
-	@mv .dapper.tmp .dapper
+build:
+	docker buildx build --target build-artifacts --output type=local,dest=. -f Dockerfile .
 
-$(TARGETS): .dapper
-	./.dapper $@
+validate:
+	docker buildx build --target validate-artifacts --output type=local,dest=. -f Dockerfile .
 
-deps: .dapper
-	./.dapper -m bind env GO111MODULE=on go mod vendor
-	./.dapper -m bind chown -R $$(id -u) vendor dist bin go.mod go.sum .cache
+test:
+	docker build -t upgrade-responder-build --target base -f Dockerfile .
+	@docker rm -f upgrade-responder-test 2>/dev/null || true
+	docker run --name upgrade-responder-test upgrade-responder-build ./scripts/test; \
+		rc=$$?; \
+		docker cp upgrade-responder-test:/go/src/github.com/longhorn/upgrade-responder/coverage.out . 2>/dev/null || true; \
+		docker rm upgrade-responder-test 2>/dev/null || true; \
+		exit $$rc
+
+package: build
+	./scripts/package
+
+ci: build test validate package
+
+release: ci
 
 .DEFAULT_GOAL := ci
-
-.PHONY: $(TARGETS)
