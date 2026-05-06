@@ -49,8 +49,7 @@ service:
 flags:
   cacheSyncInterval: 1
   cacheSize: 100
-  # Scarf.sh telemetry configuration
-  scarfEndpoint: "" # Optional: URL template with {version} placeholder (e.g., https://yourcompany.gateway.scarf.sh/package/{version})
+  scarfEndpoint: "" # Optional: string or list of URL templates. Supports {version} (always available) and any custom field from upgrade request (e.g., {longhornDistro})
   scarfTimeout: 30 # Timeout in seconds for Scarf.sh requests
 
 ingress:

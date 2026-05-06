@@ -2,10 +2,12 @@ package upgraderesponder
 
 import (
 	"fmt"
-	"github.com/Sirupsen/logrus"
-	influxcli "github.com/influxdata/influxdb/client/v2"
 	"sync"
 	"time"
+
+	"github.com/Sirupsen/logrus"
+
+	influxcli "github.com/influxdata/influxdb/client/v2"
 )
 
 const maxSyncRetries = 2

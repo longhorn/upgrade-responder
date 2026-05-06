@@ -136,10 +136,10 @@ func UpgradeResponderCmd() cli.Command {
 				Value:  100,
 				Usage:  "Specify the cache size of server. Once the number of data points in cache is bigger than cache size, the server flush and write all data in the cache to influxDB.",
 			},
-			cli.StringFlag{
+			cli.StringSliceFlag{
 				Name:   FlagScarfEndpoint,
 				EnvVar: EnvScarfEndpoint,
-				Usage:  "Specify the Scarf.sh endpoint URL template. Use {version} placeholder for app version substitution (e.g., https://your.gateway.scarf.sh/packageroute/{version})",
+				Usage:  "Specify the Scarf.sh endpoint URL template. Can be specified multiple times. Supports {version} placeholder (always available) and any custom field from the upgrade request (e.g., {longhornDistro}).",
 			},
 			cli.IntFlag{
 				Name:   FlagScarfTimeout,
@@ -170,11 +170,11 @@ func startUpgradeResponder(c *cli.Context) error {
 	port := c.Int(FlagPort)
 	cacheSyncInterval := c.Int(FlagCacheSyncInterval)
 	cacheSize := c.Int(FlagCacheSize)
-	scarfEndpoint := c.String(FlagScarfEndpoint)
+	scarfEndpoints := c.StringSlice(FlagScarfEndpoint)
 	scarfTimeout := c.Int(FlagScarfTimeout)
 
 	done := make(chan struct{})
-	server, err := upgraderesponder.NewServer(done, applicationName, responseConfigFile, requestSchemaFile, influxURL, influxUser, influxPass, queryPeriod, geodb, cacheSyncInterval, cacheSize, scarfEndpoint, scarfTimeout)
+	server, err := upgraderesponder.NewServer(done, applicationName, responseConfigFile, requestSchemaFile, influxURL, influxUser, influxPass, queryPeriod, geodb, cacheSyncInterval, cacheSize, scarfEndpoints, scarfTimeout)
 	if err != nil {
 		return err
 	}

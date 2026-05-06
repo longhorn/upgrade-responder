@@ -31,6 +31,9 @@ const (
 	InfluxDBContinuousQueryByAppVersion  = "cq_by_app_version_down_sampling"
 	InfluxDBContinuousQueryByCountryCode = "cq_by_country_code_down_sampling"
 
+	TagVersion    = "version"
+	TagAppVersion = "appVersion"
+
 	influxClientTimeOut = 10 * time.Second
 )
 
@@ -149,8 +152,7 @@ func (s *Server) ValidateExtraInfo(key string, value interface{}, extraInfoType 
 }
 
 type CheckUpgradeRequest struct {
-	AppVersion string `json:"appVersion"`
-
+	AppVersion     string                 `json:"appVersion"`
 	ExtraTagInfo   map[string]string      `json:"extraTagInfo"`
 	ExtraFieldInfo map[string]interface{} `json:"extraFieldInfo"`
 
@@ -179,7 +181,7 @@ type CheckUpgradeResponse struct {
 	RequestIntervalInMinutes int       `json:"requestIntervalInMinutes"`
 }
 
-func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requestSchemaFilePath, influxURL, influxUser, influxPass, queryPeriod, geodb string, cacheSyncInterval, cacheSize int, scarfEndpoint string, scarfTimeout int) (*Server, error) {
+func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requestSchemaFilePath, influxURL, influxUser, influxPass, queryPeriod, geodb string, cacheSyncInterval, cacheSize int, scarfEndpoints []string, scarfTimeout int) (*Server, error) {
 	InfluxDBDatabase = applicationName + "_" + InfluxDBDatabase
 	InfluxDBContinuousQueryPeriod = queryPeriod
 
@@ -209,7 +211,7 @@ func NewServer(done chan struct{}, applicationName, responseConfigFilePath, requ
 		done:           done,
 		VersionMap:     map[string]*Version{},
 		TagVersionsMap: map[string][]*Version{},
-		scarfService:   NewScarfService(scarfEndpoint, scarfTimeout),
+		scarfService:   NewScarfService(scarfEndpoints, scarfTimeout),
 	}
 	if err := s.validateAndLoadResponseConfig(&config); err != nil {
 		return nil, err
@@ -538,8 +540,10 @@ func (s *Server) recordRequest(httpReq *http.Request, req *CheckUpgradeRequest) 
 		return
 	}
 
+	templateVars := s.getTemplateVarsFromRequest(req)
+
 	// Send Scarf.sh event asynchronously for all valid requests
-	s.scarfService.SendEvent(req.AppVersion, publicIP)
+	s.scarfService.SendEvent(req.AppVersion, templateVars, publicIP)
 
 	if s.influxClient != nil {
 		var err error
@@ -597,4 +601,30 @@ func (s *Server) getFieldsFromRequest(req *CheckUpgradeRequest) map[string]inter
 	}
 
 	return fields
+}
+
+func (s *Server) getTemplateVarsFromRequest(req *CheckUpgradeRequest) map[string]string {
+	reserved := map[string]string{
+		TagVersion:    req.AppVersion,
+		TagAppVersion: req.AppVersion,
+	}
+
+	extraTagInfo := utils.MergeStringMaps(req.ExtraInfo, req.ExtraTagInfo)
+	for k, v := range extraTagInfo {
+		if s.ValidateExtraInfo(k, v, extraInfoTypeTag) {
+			if _, exists := reserved[k]; !exists {
+				reserved[k] = v
+			}
+		}
+	}
+
+	for k, v := range req.ExtraFieldInfo {
+		if s.ValidateExtraInfo(k, v, extraInfoTypeField) {
+			if _, exists := reserved[k]; !exists {
+				reserved[k] = fmt.Sprint(v)
+			}
+		}
+	}
+
+	return reserved
 }
