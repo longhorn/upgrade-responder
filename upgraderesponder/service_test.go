@@ -355,6 +355,22 @@ func TestSubstituteTemplateVars(t *testing.T) {
 			},
 			expected: "https://example.com/v1.0.0oss",
 		},
+		{
+			name:     "plus in semver build metadata is percent-encoded",
+			template: "https://example.com/{version}",
+			vars: map[string]string{
+				"version": "v1.36.4+rke2r1",
+			},
+			expected: "https://example.com/v1.36.4%2Brke2r1",
+		},
+		{
+			name:     "reserved path characters are escaped",
+			template: "https://example.com/{version}",
+			vars: map[string]string{
+				"version": "v1.0.0/beta 1",
+			},
+			expected: "https://example.com/v1.0.0%2Fbeta%201",
+		},
 	}
 
 	for _, tt := range tests {

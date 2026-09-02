@@ -135,12 +135,14 @@ func closeResponseBody(resp *http.Response) {
 //     with an empty string.
 //   - Variables in vars that are not referenced in the template are ignored.
 //   - Multiple occurrences of the same placeholder are all replaced.
+//   - Values are path-escaped, with "+" encoded as "%2B" so that semver build
+//     metadata such as "v1.36.4+rke2r1" is matched by the Scarf gateway.
 func substituteTemplateVars(template string, vars map[string]string) string {
 	return templatePlaceholderRegexp.ReplaceAllStringFunc(template, func(placeholder string) string {
 		key := strings.Trim(placeholder, "{}")
 
 		if value, ok := vars[key]; ok {
-			return url.PathEscape(value)
+			return strings.ReplaceAll(url.PathEscape(value), "+", "%2B")
 		}
 
 		return ""
